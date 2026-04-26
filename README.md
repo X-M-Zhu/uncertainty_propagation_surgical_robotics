@@ -1,5 +1,8 @@
 # Simulation-Based Uncertainty Propagation in Geometric Networks for Surgical Robotics
 
+**Author:** X.M. Christine Zhu
+**Mentor:** Dr. Russell H. Taylor
+
 This repository implements and validates a mathematical framework for **uncertainty propagation in geometric networks**, following the CIS I left-multiplicative perturbation convention.
 
 Built for surgical robotics applications where multiple sensors, rigid links, and coordinate
@@ -17,9 +20,11 @@ The math is documented in `docs/` and `PSEUDOCODE.md`.
 | Propagate uncertainty along a single kinematic chain | `query()` |
 | Propagate uncertainty and fuse all paths (multi-path) | `query_frame()` |
 | Find where a point lands in another frame, with uncertainty | `query_point()` |
+| Compute correlation-aware relative vector between two points | `query_relative_vector()` |
 | Compute distance between two points with correct correlation | `query_distance()` |
 | Apply a loop closure constraint to reduce uncertainty | `query_closed_loop_posterior()` |
 | Automatically find and apply all loop constraints | `query_auto_loop_posterior()` |
+| Condition on heterogeneous observations (loop, point, distance) | `condition_on_observations()` |
 
 ---
 
@@ -28,8 +33,8 @@ The math is documented in `docs/` and `PSEUDOCODE.md`.
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
-cd kinematic_error_propagation
+git clone https://github.com/YOUR_USERNAME/kinematic-uncertainty-networks.git
+cd kinematic-uncertainty-networks
 ```
 
 ### 2. Create and activate a Python environment
@@ -264,7 +269,8 @@ path_2 = ["Pelvis", "L_Hip", "L_Foot", "R_Foot"]  # via left leg
 
 posterior = net.query_closed_loop_posterior(path_1, path_2)
 
-print("Before (path 1 alone): trace =", ...)
+prior = net.query("Pelvis", "R_Foot")
+print("Before (path 1 alone): trace =", np.trace(prior.transform.C).round(6))
 print("After  (loop conditioning): trace =", np.trace(posterior.C_res).round(6))
 ```
 
@@ -278,12 +284,15 @@ tightens the covariance on both paths.
 All analytic results are validated against Monte Carlo simulation. Run any of:
 
 ```bash
-python scripts/validate_open_chain_mc.py        # SE(3) chain propagation
-python scripts/validate_frame_to_point_mc.py    # frame-to-point
-python scripts/validate_point_to_point_mc.py    # point-to-point correlation
-python scripts/validate_closed_loop_mc.py       # loop constraint conditioning
-python scripts/validate_random_network_mc.py    # random network stress test
-python scripts/validate_shared_infrastructure_mc.py  # surgical robotics scenario
+python scripts/validate_open_chain_mc.py                  # SE(3) chain propagation
+python scripts/validate_frame_to_point_mc.py              # frame-to-point
+python scripts/validate_point_mc.py                       # point uncertainty
+python scripts/validate_point_to_point_mc.py              # point-to-point correlation
+python scripts/validate_closed_loop_mc.py                 # loop constraint conditioning
+python scripts/validate_random_network_mc.py              # random network stress test
+python scripts/validate_multi_edge_corr_mc_chain.py       # multi-edge correlation (chain)
+python scripts/validate_multi_edge_corr_mc_branching.py   # multi-edge correlation (branching)
+python scripts/validate_shared_infrastructure_mc.py       # surgical robotics scenario
 ```
 
 Each script prints analytic vs Monte Carlo covariance and the relative
@@ -299,14 +308,18 @@ src/uncertainty_networks/
     uncertain_geometry.py   UncertainTransform: compose, inv, transform_point
     network.py              GeometricNetwork: all query methods
     closed_loop.py          Loop conditioning and Gaussian fusion
+    observations.py         Observation/factor abstraction (loop, point, distance)
+    visualization.py        Static (matplotlib) and interactive (Plotly 3D) visualization
     examples.py             Reusable example network builders
 
 scripts/
     validate_*_mc.py        Monte Carlo validation scripts
+    plot_network.py         Generate visualization figures (saved to results/)
     demo_open_chain.py      Simple demo
 
 tests/                      Unit tests (run with pytest)
-docs/                       Math note (PDF)
+docs/                       Math note (PDF) and project report
+results/                    Generated figures
 PSEUDOCODE.md               Full pseudocode and math reference
 ```
 

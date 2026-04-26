@@ -178,13 +178,13 @@ Scope includes:
 
 📁 `README.md`
 
-- [ ] How to run tests and validations
-- [ ] Explain closed-loop capability
+- [x] How to run tests and validations
+- [x] Explain closed-loop capability
 
 📁 `scripts/run_all_validations.py`
 
-- [ ] Run all key validation scripts
-- [ ] Print summary table (errors, traces, ESS)
+- [x] Run all key validation scripts
+- [x] Print summary table (errors, traces, ESS)
 
 ---
 
