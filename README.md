@@ -1,6 +1,6 @@
 # Simulation-Based Uncertainty Propagation in Geometric Networks for Surgical Robotics
 
-**Author:** X.M. Christine Zhu
+**Author:** X.M. Christine Zhu<br>
 **Mentor:** Dr. Russell H. Taylor
 
 This repository implements and validates a mathematical framework for **uncertainty propagation in geometric networks**, following the CIS I left-multiplicative perturbation convention.
