@@ -1,0 +1,4 @@
+{
+  "name": "ambf_server",
+  "dependencies": ["AMBF"]
+}
