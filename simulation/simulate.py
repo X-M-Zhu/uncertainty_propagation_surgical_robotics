@@ -1,11 +1,17 @@
 """
 Standalone animation script launched by gui.py as a subprocess.
 Reads selections from a JSON file passed as argv[1].
+
+Supports two modes (set via "mode" key in selections JSON):
+  "mock" (default) — joint angles driven by sine waves, no AMBF needed.
+  "live"           — joint angles streamed from ambf_bridge.py running in WSL.
 """
 
 import sys
 import os
 import json
+import subprocess
+import threading
 import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +22,7 @@ from node_registry import NODES
 from uncertainty_system import build_network, mock_joint_trajectory
 
 import matplotlib
-matplotlib.use("MacOSX")
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import matplotlib.patches as mpatches
@@ -28,6 +34,8 @@ ACCENT    = "#0f3460"
 TEXT      = "#e0e0e0"
 _TRIAD    = ["#ff4444", "#44ff88", "#4488ff"]
 
+
+# ── Uncertainty ellipsoid geometry ────────────────────────────────────────────
 
 def _ellipsoid(center, cov3, n_sigma=50, n_pts=20):
     eigvals, eigvecs = np.linalg.eigh(cov3)
@@ -45,11 +53,94 @@ def _ellipsoid(center, cov3, n_sigma=50, n_pts=20):
             ell[:, 2].reshape(n_pts, n_pts))
 
 
+# ── AMBF live-state reader ─────────────────────────────────────────────────────
+
+class AmbfBridge:
+    """
+    Spawns ambf_bridge.py inside WSL as a subprocess and continuously
+    reads the latest joint-state JSON line in a background thread.
+    Thread-safe: _latest is written only by the reader thread,
+    read only by the main (animation) thread between frames.
+    """
+
+    def __init__(self, robot_names, bridge_cmd):
+        self._latest = {}          # {robot_name: [joint_angles]}
+        self._lock   = threading.Lock()
+        self._alive  = True
+
+        # Build the WSL command that sources ROS and runs the bridge.
+        # bridge_cmd comes from the GUI (user-configurable).
+        bridge_path = os.path.join(_HERE, "ambf_bridge.py").replace("\\", "/")
+        # Convert Windows path to WSL mount path
+        # e.g. C:\Users\... → /mnt/c/Users/...
+        if bridge_path[1] == ":":
+            drive = bridge_path[0].lower()
+            bridge_path = f"/mnt/{drive}" + bridge_path[2:].replace("\\", "/")
+
+        names_arg = " ".join(robot_names)
+        inner_cmd = f"{bridge_cmd} && python3 {bridge_path} {names_arg}"
+
+        self._proc = subprocess.Popen(
+            ["wsl", "bash", "-lc", inner_cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+
+        self._thread = threading.Thread(target=self._read_loop, daemon=True)
+        self._thread.start()
+
+    def _read_loop(self):
+        for line in self._proc.stdout:
+            if not self._alive:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                with self._lock:
+                    self._latest = data
+            except json.JSONDecodeError:
+                pass
+
+    def get(self):
+        with self._lock:
+            return dict(self._latest)
+
+    def close(self):
+        self._alive = False
+        try:
+            self._proc.terminate()
+        except Exception:
+            pass
+
+
+# ── Main animation ─────────────────────────────────────────────────────────────
+
 def run(selections):
+    # Determine mode — every selection carries the same "mode" value.
+    mode        = selections[0].get("mode", "mock") if selections else "mock"
+    bridge_cmd  = selections[0].get("bridge_cmd", "") if selections else ""
+    robot_names = [s["name"] for s in selections]
+
+    bridge = None
+    mode_label = "Mock"
+    if mode == "live":
+        try:
+            bridge = AmbfBridge(robot_names, bridge_cmd)
+            mode_label = "Live (AMBF)"
+        except Exception as e:
+            sys.stderr.write(f"[simulate] WARNING: could not start AMBF bridge: {e}\n"
+                             "[simulate] Falling back to mock mode.\n")
+
     fig = plt.figure(figsize=(11, 8), facecolor=BG)
     ax  = fig.add_subplot(111, projection="3d")
-    fig.suptitle("Surgical Robotics — Live Uncertainty Propagation",
-                 color=TEXT, fontsize=13, y=0.97)
+    fig.suptitle(
+        f"Surgical Robotics — Uncertainty Propagation  [{mode_label}]",
+        color=TEXT, fontsize=13, y=0.97,
+    )
 
     t_val = [0.0]
 
@@ -66,10 +157,17 @@ def run(selections):
 
         t_val[0] += 0.05
 
+        # Resolve joint angles: live from AMBF or mock sine waves
+        live_states = bridge.get() if bridge else {}
+
         live = []
         for sel in selections:
             s = sel.copy()
-            s["joint_angles"] = mock_joint_trajectory(t_val[0], sel["name"])
+            name = sel["name"]
+            if name in live_states and live_states[name]:
+                s["joint_angles"] = np.array(live_states[name])
+            else:
+                s["joint_angles"] = mock_joint_trajectory(t_val[0], name)
             live.append(s)
 
         net, tip_nodes = build_network(live)
@@ -120,7 +218,7 @@ def run(selections):
                     ax.quiver(*pos, *d, color=tc, linewidth=1.0,
                               arrow_length_ratio=0.3, normalize=False)
 
-                # ellipsoid at tip
+                # uncertainty ellipsoid at tip
                 if is_tip and not np.allclose(cov3, 0) and np.all(np.isfinite(cov3)):
                     try:
                         X, Y, Z = _ellipsoid(pos, cov3)
@@ -141,21 +239,32 @@ def run(selections):
         ax.set_ylim(center[1] - half, center[1] + half)
         ax.set_zlim(center[2] - half, center[2] + half)
 
-        # legend
-        handles = []
+        # legend + mode indicator
+        patch_list = []
         for sel in live:
             n = sel["name"]
             if n in tip_nodes:
-                handles.append(mpatches.Patch(
-                    color=NODES[n]["color"], label=n))
-        if handles:
-            ax.legend(handles=handles, loc="upper left",
+                patch_list.append(mpatches.Patch(color=NODES[n]["color"], label=n))
+        if patch_list:
+            ax.legend(handles=patch_list, loc="upper left",
                       facecolor=PANEL_BG, labelcolor=TEXT, fontsize=9)
+
+        # show AMBF connectivity status in corner
+        if bridge:
+            states_received = bool(bridge.get())
+            status_text = "AMBF: connected" if states_received else "AMBF: waiting…"
+            status_color = "#44ff88" if states_received else "#ffaa44"
+            ax.text2D(0.98, 0.02, status_text, transform=ax.transAxes,
+                      color=status_color, fontsize=8, ha="right")
 
     ani = animation.FuncAnimation(fig, update, interval=60,
                                   cache_frame_data=False)
     plt.tight_layout()
-    plt.show()
+    try:
+        plt.show()
+    finally:
+        if bridge:
+            bridge.close()
 
 
 if __name__ == "__main__":

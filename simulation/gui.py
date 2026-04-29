@@ -4,6 +4,17 @@ Surgical Robotics Uncertainty Visualizer — GUI
 Tkinter-based node selector. User checks robots, adjusts sigma sliders,
 then clicks "Run Simulation" to open a live matplotlib animation showing
 the kinematic chain with uncertainty ellipsoids updating in real time.
+
+AMBF Integration
+----------------
+The "AMBF" panel at the bottom lets you:
+  1. Launch the AMBF simulator in WSL (opens its own 3D window via WSLg).
+  2. Switch the uncertainty viz to "Live" mode, reading real joint states
+     from AMBF instead of mock sine waves.
+
+The "ROS source command" field must source your ROS workspace so that
+ambf_client is importable.  Example:
+    source /opt/ros/noetic/setup.bash && source ~/ambf_ws/devel/setup.bash
 """
 
 import sys
@@ -20,8 +31,6 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(_HERE), 'src'))
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-
 from node_registry import NODES
 
 
@@ -33,8 +42,14 @@ TEXT      = "#e0e0e0"
 HIGHLIGHT = "#e94560"
 BTN_BG    = "#0f3460"
 BTN_FG    = "#ffffff"
+GREEN     = "#44ff88"
+AMBER     = "#ffaa44"
 
-
+# ── AMBF defaults ─────────────────────────────────────────────────────────────
+DEFAULT_AMBF_LAUNCH  = ("ambf_simulator "
+                        "--launch_file ~/ambf_src/core/ambf_models/descriptions/launch.yaml "
+                        "-l 4,5,6")
+DEFAULT_ROS_SOURCE   = "source /opt/ros/noetic/setup.bash && source ~/ambf_ws/devel/setup.bash"
 
 
 # ── GUI ───────────────────────────────────────────────────────────────────────
@@ -51,9 +66,16 @@ class UncertaintyGUI:
         self._sigma_base  = {}   # name -> DoubleVar  (slider)
         self._base_pos    = {}   # name -> [DoubleVar x3]
 
+        # AMBF state
+        self._ambf_proc      = None          # subprocess for AMBF in WSL
+        self._sim_mode       = tk.StringVar(value="mock")   # "mock" | "live"
+        self._ambf_launch    = tk.StringVar(value=DEFAULT_AMBF_LAUNCH)
+        self._ros_source     = tk.StringVar(value=DEFAULT_ROS_SOURCE)
+        self._ambf_status    = tk.StringVar(value="Not launched")
+
         self._build_header()
-        self._build_node_panel()
-        self._build_config_panel()
+        self._build_main_area()
+        self._build_ambf_panel()
         self._build_footer()
 
     # ── header ────────────────────────────────────────────────────────────────
@@ -68,10 +90,18 @@ class UncertaintyGUI:
                  bg=HIGHLIGHT, fg="#ffdddd",
                  font=("Helvetica", 10)).pack()
 
+    # ── main area (node panel + config panel side by side) ───────────────────
+
+    def _build_main_area(self):
+        area = tk.Frame(self.root, bg=BG)
+        area.pack(fill="both", expand=True)
+        self._build_node_panel(area)
+        self._build_config_panel(area)
+
     # ── left panel: node checkboxes ───────────────────────────────────────────
 
-    def _build_node_panel(self):
-        outer = tk.Frame(self.root, bg=BG)
+    def _build_node_panel(self, parent):
+        outer = tk.Frame(parent, bg=BG)
         outer.pack(side="left", fill="y", padx=10, pady=10)
 
         tk.Label(outer, text="NODES", bg=BG, fg=HIGHLIGHT,
@@ -101,8 +131,8 @@ class UncertaintyGUI:
 
     # ── right panel: per-robot configuration ──────────────────────────────────
 
-    def _build_config_panel(self):
-        self._config_outer = tk.Frame(self.root, bg=BG)
+    def _build_config_panel(self, parent):
+        self._config_outer = tk.Frame(parent, bg=BG)
         self._config_outer.pack(side="left", fill="both",
                                 expand=True, padx=10, pady=10)
 
@@ -153,12 +183,10 @@ class UncertaintyGUI:
                         padx=10, pady=8)
         card.pack(fill="x", pady=4)
 
-        # title
         tk.Label(card, text=f"  {name}", bg=PANEL_BG, fg=color,
                  font=("Helvetica", 11, "bold")).grid(
                      row=0, column=0, columnspan=4, sticky="w")
 
-        # ensure vars exist
         if name not in self._sigma_joint:
             self._sigma_joint[name] = tk.DoubleVar(
                 value=node["default_sigma_joint"])
@@ -197,7 +225,6 @@ class UncertaintyGUI:
         _slider_row(card, 2, "Base reg. σ (m)",
                     self._sigma_base[name],  0.0001, 0.02, "{:.4f} m")
 
-        # base position
         tk.Label(card, text="Base position (x, y, z):",
                  bg=PANEL_BG, fg=TEXT,
                  font=("Helvetica", 9)).grid(
@@ -214,7 +241,6 @@ class UncertaintyGUI:
                          font=("Courier", 10))
             e.grid(row=0, column=i * 2 + 1, padx=(2, 6))
 
-        # Raven2 warning
         if name == "Raven2":
             tk.Label(card,
                      text="⚠  DH params not yet available — "
@@ -224,6 +250,127 @@ class UncertaintyGUI:
                      wraplength=420).grid(
                          row=5, column=0, columnspan=4,
                          sticky="w", pady=(6, 0))
+
+    # ── AMBF integration panel ────────────────────────────────────────────────
+
+    def _build_ambf_panel(self):
+        panel = tk.Frame(self.root, bg=PANEL_BG, padx=10, pady=8, relief="flat")
+        panel.pack(fill="x", padx=10, pady=(0, 4))
+
+        # Title row
+        title_row = tk.Frame(panel, bg=PANEL_BG)
+        title_row.pack(fill="x")
+        tk.Label(title_row, text="AMBF INTEGRATION", bg=PANEL_BG, fg=HIGHLIGHT,
+                 font=("Helvetica", 11, "bold")).pack(side="left")
+        self._ambf_status_lbl = tk.Label(
+            title_row, textvariable=self._ambf_status,
+            bg=PANEL_BG, fg=AMBER, font=("Helvetica", 9, "italic"))
+        self._ambf_status_lbl.pack(side="right", padx=6)
+
+        # ROS source command
+        row1 = tk.Frame(panel, bg=PANEL_BG)
+        row1.pack(fill="x", pady=2)
+        tk.Label(row1, text="ROS source cmd:", bg=PANEL_BG, fg=TEXT,
+                 font=("Helvetica", 9), width=16, anchor="w").pack(side="left")
+        tk.Entry(row1, textvariable=self._ros_source,
+                 bg=ACCENT, fg=TEXT, insertbackground=TEXT,
+                 relief="flat", font=("Courier", 9), width=60).pack(
+                     side="left", fill="x", expand=True, padx=(4, 0))
+
+        # AMBF launch command
+        row2 = tk.Frame(panel, bg=PANEL_BG)
+        row2.pack(fill="x", pady=2)
+        tk.Label(row2, text="AMBF launch cmd:", bg=PANEL_BG, fg=TEXT,
+                 font=("Helvetica", 9), width=16, anchor="w").pack(side="left")
+        tk.Entry(row2, textvariable=self._ambf_launch,
+                 bg=ACCENT, fg=TEXT, insertbackground=TEXT,
+                 relief="flat", font=("Courier", 9), width=60).pack(
+                     side="left", fill="x", expand=True, padx=(4, 0))
+
+        # Buttons + mode
+        row3 = tk.Frame(panel, bg=PANEL_BG)
+        row3.pack(fill="x", pady=(6, 2))
+
+        tk.Button(row3, text="▶  Launch AMBF in WSL",
+                  command=self._launch_ambf,
+                  bg="#1a5c3a", fg="white",
+                  font=("Helvetica", 10, "bold"),
+                  relief="flat", padx=12, pady=4,
+                  activebackground="#2a8c5a",
+                  cursor="hand2").pack(side="left", padx=(0, 8))
+
+        tk.Button(row3, text="■  Stop AMBF",
+                  command=self._stop_ambf,
+                  bg="#5c1a1a", fg="white",
+                  font=("Helvetica", 10),
+                  relief="flat", padx=10, pady=4,
+                  activebackground="#8c2a2a",
+                  cursor="hand2").pack(side="left", padx=(0, 20))
+
+        tk.Label(row3, text="Viz mode:", bg=PANEL_BG, fg=TEXT,
+                 font=("Helvetica", 9)).pack(side="left")
+        tk.Radiobutton(row3, text="Mock (sine waves)", variable=self._sim_mode,
+                       value="mock", bg=PANEL_BG, fg=TEXT,
+                       selectcolor=ACCENT, activebackground=PANEL_BG,
+                       font=("Helvetica", 9)).pack(side="left", padx=4)
+        tk.Radiobutton(row3, text="Live (AMBF joint states)", variable=self._sim_mode,
+                       value="live", bg=PANEL_BG, fg=GREEN,
+                       selectcolor=ACCENT, activebackground=PANEL_BG,
+                       font=("Helvetica", 9, "bold")).pack(side="left", padx=4)
+
+        tk.Label(panel,
+                 text="Live mode streams real joint angles from AMBF via ambf_bridge.py "
+                      "running in WSL. AMBF must be launched and ROS must be sourced first.",
+                 bg=PANEL_BG, fg="#888888",
+                 font=("Helvetica", 8, "italic"),
+                 wraplength=700, justify="left").pack(anchor="w", pady=(4, 0))
+
+    def _launch_ambf(self):
+        if self._ambf_proc and self._ambf_proc.poll() is None:
+            messagebox.showinfo("AMBF", "AMBF is already running.")
+            return
+
+        ros_source  = self._ros_source.get().strip()
+        launch_cmd  = self._ambf_launch.get().strip()
+
+        if not launch_cmd:
+            messagebox.showerror("AMBF", "Please enter an AMBF launch command.")
+            return
+
+        full_cmd = f"{ros_source} && {launch_cmd}" if ros_source else launch_cmd
+
+        try:
+            self._ambf_proc = subprocess.Popen(
+                ["wsl", "bash", "-lc", full_cmd],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self._ambf_status.set("Launching…")
+            self._ambf_status_lbl.config(fg=AMBER)
+            # Poll after 3 s to see if it's still alive
+            self.root.after(3000, self._check_ambf_alive)
+        except FileNotFoundError:
+            messagebox.showerror(
+                "WSL not found",
+                "Could not find 'wsl'. Make sure WSL is installed and "
+                "accessible from your PATH.")
+        except Exception as e:
+            messagebox.showerror("AMBF launch error", str(e))
+
+    def _check_ambf_alive(self):
+        if self._ambf_proc and self._ambf_proc.poll() is None:
+            self._ambf_status.set("Running ✓")
+            self._ambf_status_lbl.config(fg=GREEN)
+        else:
+            self._ambf_status.set("Exited (check WSL / launch cmd)")
+            self._ambf_status_lbl.config(fg=HIGHLIGHT)
+
+    def _stop_ambf(self):
+        if self._ambf_proc and self._ambf_proc.poll() is None:
+            self._ambf_proc.terminate()
+            self._ambf_proc = None
+        self._ambf_status.set("Stopped")
+        self._ambf_status_lbl.config(fg=AMBER)
 
     # ── footer: run button ────────────────────────────────────────────────────
 
@@ -262,6 +409,10 @@ class UncertaintyGUI:
     # ── run ───────────────────────────────────────────────────────────────────
 
     def _run(self):
+        mode       = self._sim_mode.get()
+        ros_source = self._ros_source.get().strip()
+        bridge_cmd = ros_source  # passed through to simulate.py → AmbfBridge
+
         selections = []
         for name, var in self._node_vars.items():
             if not var.get():
@@ -284,6 +435,8 @@ class UncertaintyGUI:
                 "sigma_joint":  self._sigma_joint[name].get(),
                 "sigma_base":   self._sigma_base[name].get(),
                 "base_pos":     base_pos,
+                "mode":         mode,
+                "bridge_cmd":   bridge_cmd,
             })
 
         if not selections:
@@ -291,25 +444,34 @@ class UncertaintyGUI:
                                 "Please select at least one robot.")
             return
 
-        self._status.config(text="Simulation running…  "
-                                 "(close the plot window to stop)")
+        if mode == "live" and (self._ambf_proc is None or
+                               self._ambf_proc.poll() is not None):
+            if not messagebox.askyesno(
+                    "AMBF not running",
+                    "Live mode is selected but AMBF does not appear to be running.\n\n"
+                    "Run in Mock mode instead?"):
+                return
+            for s in selections:
+                s["mode"] = "mock"
+
+        mode_label = "Live (AMBF)" if mode == "live" else "Mock"
+        self._status.config(
+            text=f"Simulation running [{mode_label}]…  "
+                 "(close the plot window to stop)")
         self.root.update()
 
-        # write selections to a temp file and launch simulate.py as subprocess
-        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json',
-                                         delete=False)
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
         json.dump(selections, tmp)
         tmp.close()
 
-        script = os.path.join(_HERE, 'simulate.py')
+        script   = os.path.join(_HERE, 'simulate.py')
         log_path = os.path.join(_HERE, 'simulate_error.log')
-        log = open(log_path, 'w')
-        proc = subprocess.Popen(
+        log      = open(log_path, 'w')
+        proc     = subprocess.Popen(
             [sys.executable, script, tmp.name],
             cwd=_HERE,
-            stdout=log, stderr=log
+            stdout=log, stderr=log,
         )
-        # poll after 2 seconds to catch immediate crashes
         self.root.after(2000, lambda: self._check_proc(proc, log_path))
 
 
