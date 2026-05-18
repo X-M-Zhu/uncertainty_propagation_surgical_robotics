@@ -61,10 +61,12 @@ class UncertaintyGUI:
         self.root.configure(bg=BG)
         self.root.resizable(False, False)
 
-        self._node_vars   = {}   # name -> BooleanVar (checkbox)
-        self._sigma_joint = {}   # name -> DoubleVar  (slider)
-        self._sigma_base  = {}   # name -> DoubleVar  (slider)
-        self._base_pos    = {}   # name -> [DoubleVar x3]
+        self._node_vars    = {}   # name -> BooleanVar (checkbox)
+        self._sigma_joint  = {}   # name -> DoubleVar  (slider) — dynamic motion error
+        self._sigma_static = {}   # name -> DoubleVar  (slider) — static positioning error floor
+        self._encoder_res  = {}   # name -> DoubleVar  (entry)  — encoder resolution (rad/count)
+        self._sigma_base   = {}   # name -> DoubleVar  (slider)
+        self._base_pos     = {}   # name -> [DoubleVar x3]
 
         # AMBF state
         self._ambf_proc      = None          # subprocess for AMBF in WSL
@@ -188,11 +190,15 @@ class UncertaintyGUI:
                      row=0, column=0, columnspan=4, sticky="w")
 
         if name not in self._sigma_joint:
-            self._sigma_joint[name] = tk.DoubleVar(
+            self._sigma_joint[name]  = tk.DoubleVar(
                 value=node["default_sigma_joint"])
-            self._sigma_base[name]  = tk.DoubleVar(
+            self._sigma_static[name] = tk.DoubleVar(
+                value=node["default_sigma_static"])
+            self._encoder_res[name]  = tk.DoubleVar(
+                value=node["encoder_resolution"])
+            self._sigma_base[name]   = tk.DoubleVar(
                 value=node["default_sigma_base"])
-            self._base_pos[name]    = [
+            self._base_pos[name]     = [
                 tk.DoubleVar(value=v)
                 for v in node["default_base_pos"]
             ]
@@ -220,18 +226,49 @@ class UncertaintyGUI:
             var.trace_add("write", _update_lbl)
             _update_lbl()
 
-        _slider_row(card, 1, "Joint noise σ (rad/m)",
-                    self._sigma_joint[name], 0.0001, 0.02, "{:.4f} rad")
-        _slider_row(card, 2, "Base reg. σ (m)",
-                    self._sigma_base[name],  0.0001, 0.02, "{:.4f} m")
+        _slider_row(card, 1, "Dynamic σ (rad/m)",
+                    self._sigma_joint[name],  0.0001, 0.02, "{:.4f} rad")
+        _slider_row(card, 2, "Static σ (rad/m)",
+                    self._sigma_static[name], 0.00005, 0.005, "{:.5f} rad")
+
+        # ── Encoder resolution row (uniform → Gaussian conversion) ────────────
+        enc_row = tk.Frame(card, bg=PANEL_BG)
+        enc_row.grid(row=3, column=0, columnspan=4, sticky="w", pady=2)
+
+        tk.Label(enc_row, text="Encoder res. (rad)",
+                 bg=PANEL_BG, fg=TEXT,
+                 font=("Helvetica", 9), width=18, anchor="w").pack(side="left")
+
+        enc_entry = tk.Entry(enc_row, textvariable=self._encoder_res[name],
+                             width=10, bg=ACCENT, fg=color,
+                             insertbackground=TEXT, relief="flat",
+                             font=("Courier", 9))
+        enc_entry.pack(side="left", padx=(4, 8))
+
+        # Live label: shows the equivalent Gaussian sigma (resolution / sqrt(12))
+        enc_sigma_lbl = tk.Label(enc_row, bg=PANEL_BG, fg="#aaaaaa",
+                                 font=("Courier", 9))
+        enc_sigma_lbl.pack(side="left")
+
+        def _update_enc_lbl(*_, _v=self._encoder_res[name], _lbl=enc_sigma_lbl):
+            try:
+                sigma_enc = _v.get() / (12 ** 0.5)
+                _lbl.config(text=f"→ σ = {sigma_enc:.5f} rad")
+            except tk.TclError:
+                pass
+        self._encoder_res[name].trace_add("write", _update_enc_lbl)
+        _update_enc_lbl()
+
+        _slider_row(card, 4, "Base reg. σ (m)",
+                    self._sigma_base[name],   0.0001, 0.02, "{:.4f} m")
 
         tk.Label(card, text="Base position (x, y, z):",
                  bg=PANEL_BG, fg=TEXT,
                  font=("Helvetica", 9)).grid(
-                     row=3, column=0, sticky="w", pady=(6, 2))
+                     row=5, column=0, sticky="w", pady=(6, 2))
 
         pos_row = tk.Frame(card, bg=PANEL_BG)
-        pos_row.grid(row=4, column=0, columnspan=4, sticky="w")
+        pos_row.grid(row=6, column=0, columnspan=4, sticky="w")
         for i, axis in enumerate(["x", "y", "z"]):
             tk.Label(pos_row, text=f"{axis}:", bg=PANEL_BG, fg=TEXT,
                      font=("Helvetica", 9)).grid(row=0, column=i * 2, padx=(4, 0))
@@ -241,6 +278,16 @@ class UncertaintyGUI:
                          font=("Courier", 10))
             e.grid(row=0, column=i * 2 + 1, padx=(2, 6))
 
+        if name == "Galen":
+            tk.Label(card,
+                     text="ℹ  Parallel mechanism FK is approximate "
+                          "(linearised delta model from YAML geometry). "
+                          "Refine R_c / h0 in node_registry.py with real calibration data.",
+                     bg=PANEL_BG, fg="#7EC8E3",
+                     font=("Helvetica", 8, "italic"),
+                     wraplength=420).grid(
+                         row=7, column=0, columnspan=4,
+                         sticky="w", pady=(6, 0))
         if name == "Raven2":
             tk.Label(card,
                      text="⚠  DH params not yet available — "
@@ -248,7 +295,7 @@ class UncertaintyGUI:
                      bg=PANEL_BG, fg="#ffaa44",
                      font=("Helvetica", 8, "italic"),
                      wraplength=420).grid(
-                         row=5, column=0, columnspan=4,
+                         row=7, column=0, columnspan=4,
                          sticky="w", pady=(6, 0))
 
     # ── AMBF integration panel ────────────────────────────────────────────────
@@ -430,13 +477,15 @@ class UncertaintyGUI:
                 base_pos = NODES[name]["default_base_pos"]
 
             selections.append({
-                "name":         name,
-                "joint_angles": [0.0] * NODES[name]["n_joints"],
-                "sigma_joint":  self._sigma_joint[name].get(),
-                "sigma_base":   self._sigma_base[name].get(),
-                "base_pos":     base_pos,
-                "mode":         mode,
-                "bridge_cmd":   bridge_cmd,
+                "name":              name,
+                "joint_angles":      [0.0] * NODES[name]["n_joints"],
+                "sigma_joint":       self._sigma_joint[name].get(),
+                "sigma_static":      self._sigma_static[name].get(),
+                "encoder_resolution": self._encoder_res[name].get(),
+                "sigma_base":        self._sigma_base[name].get(),
+                "base_pos":          base_pos,
+                "mode":              mode,
+                "bridge_cmd":        bridge_cmd,
             })
 
         if not selections:

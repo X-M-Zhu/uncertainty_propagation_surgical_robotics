@@ -26,8 +26,14 @@ HANDLE_NAMES = {
     "PSM":    "psm/baselink",
     "ECM":    "ecm/baselink",
     "MTM":    "mtm/TopPanel",
+    "Galen":  "Base",
     "Raven2": "raven2/baselink",
 }
+
+# Galen has 29 total joints; we only want the 5 actuated ones.
+# Indices in the YAML joint list order: c1=2, c2=7, c3=12, tilt=22, roll=24
+# Returned order matches galen_fk: [c1, c2, c3, roll, tilt]
+GALEN_JOINT_INDICES = [2, 7, 12, 24, 22]
 
 POLL_HZ = 30   # update rate sent to Windows side
 
@@ -78,7 +84,11 @@ def main(robot_names):
             try:
                 joints = h.get_all_joint_pos()
                 if joints:
-                    states[name] = list(joints)
+                    if name == "Galen":
+                        states[name] = [joints[i] for i in GALEN_JOINT_INDICES
+                                        if i < len(joints)]
+                    else:
+                        states[name] = list(joints)
             except Exception:
                 pass
 

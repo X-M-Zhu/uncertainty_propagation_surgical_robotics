@@ -115,6 +115,61 @@ def raven2_fk(joints):
     )
 
 
+def galen_fk(joints):
+    """
+    Galen EE approximate FK — 5 DOF: c1,c2,c3 (m), roll (rad), tilt (rad).
+    Derived from 20260414_galenEE.yaml body poses. Parallel mechanism is
+    linearised (small-angle); serial roll+tilt are exact rotations.
+    Refine R_c and h0 with real calibration data.
+    """
+    j = list(joints) + [0.0] * (5 - len(joints))
+    c1, c2, c3, roll, tilt = j[0], j[1], j[2], j[3], j[4]
+
+    R_c = 0.255   # carriage radius (m) — from YAML geometry
+    h0  = 0.837   # nominal platform height from base at zero joints (m)
+
+    # --- Mobile Platform (parallel stage) ---
+    c_avg = (c1 + c2 + c3) / 3.0
+    z_mp  = h0 + c_avg
+    # Carriage unit vectors in Base XY: n1=(-1,0), n2=(0.5,-√3/2), n3=(0.5,+√3/2)
+    plt_pitch = (c1 - 0.5*c2 - 0.5*c3) / R_c    # small rotation about base y
+    plt_roll  = (c3 - c2) * (3**0.5 / 2) / R_c  # small rotation about base x
+    cp, sp = np.cos(plt_pitch), np.sin(plt_pitch)
+    crp, srp = np.cos(plt_roll), np.sin(plt_roll)
+    R_mp = np.array([[cp, sp*srp, sp*crp],
+                     [0,     crp,    -srp],
+                     [-sp, cp*srp, cp*crp]])
+    T_mp = np.eye(4)
+    T_mp[:3, :3] = R_mp
+    T_mp[:3,  3] = [0.0, 0.0, z_mp]
+
+    # --- Roll Arm Base: pivot offset (0.031, 0, 0.058) in MP frame, then roll about z ---
+    cr, sr = np.cos(roll), np.sin(roll)
+    R_roll = np.array([[cr, -sr, 0],
+                       [sr,  cr, 0],
+                       [0,   0,  1]])
+    T_rab = np.eye(4)
+    T_rab[:3, :3] = R_mp @ R_roll
+    T_rab[:3,  3] = T_mp[:3, :3] @ np.array([0.031, 0.0, 0.058]) + T_mp[:3, 3]
+
+    # --- Tilt Distal: 0.588 m along Roll Arm z, then tilt about Roll Arm y ---
+    tilt_eff = tilt - 0.126   # kinematic offset from YAML (offset: -0.12595)
+    ct, st = np.cos(tilt_eff), np.sin(tilt_eff)
+    R_tilt_j = np.array([[ct, 0,  st],
+                          [0,  1,   0],
+                          [-st, 0, ct]])
+    T_tilt = np.eye(4)
+    T_tilt[:3, :3] = T_rab[:3, :3] @ R_tilt_j
+    T_tilt[:3,  3] = T_rab[:3, :3] @ np.array([0.0, 0.0, 0.588]) + T_rab[:3, 3]
+
+    # --- Tip (dovetail): 0.032 m fixed along Tilt Distal z ---
+    T_tip = np.eye(4)
+    T_tip[:3, :3] = T_tilt[:3, :3]
+    T_tip[:3,  3] = T_tilt[:3, :3] @ np.array([0.0, 0.0, 0.032]) + T_tilt[:3, 3]
+
+    return [T_mp, T_rab, T_tilt, T_tip]
+
+
 # ── Node registry ─────────────────────────────────────────────────────────────
 
 NODES = {
@@ -131,8 +186,10 @@ NODES = {
         "ambf_namespace":  "/ambf/env/psm/",
         "ambf_base_link":  "baselink",
         "default_base_pos": [0.5,  0.5, -0.7],
-        "default_sigma_joint": 0.001,   # rad (or m for prismatic)
-        "default_sigma_base":  0.002,   # m
+        "default_sigma_joint":  0.001,    # rad — dynamic motion error
+        "default_sigma_static": 0.001,    # rad — backlash / compliance floor
+        "encoder_resolution":   0.00018,  # rad/count — 14-bit encoder over ±1.5 rad range
+        "default_sigma_base":   0.002,    # m
         "color":           "#FF6B6B",
     },
     "ECM": {
@@ -145,8 +202,10 @@ NODES = {
         "ambf_namespace":  "/ambf/env/ecm/",
         "ambf_base_link":  "baselink",
         "default_base_pos": [0.5, -0.4, -0.6],
-        "default_sigma_joint": 0.001,
-        "default_sigma_base":  0.002,
+        "default_sigma_joint":  0.001,
+        "default_sigma_static": 0.001,
+        "encoder_resolution":   0.00018,  # rad/count — same 14-bit encoder as PSM
+        "default_sigma_base":   0.002,
         "color":           "#4ECDC4",
     },
     "MTM": {
@@ -161,9 +220,28 @@ NODES = {
         "ambf_namespace":  "/ambf/env/mtm/",
         "ambf_base_link":  "baselink",
         "default_base_pos": [-0.5, 0.0,  0.0],
-        "default_sigma_joint": 0.0005,
-        "default_sigma_base":  0.001,
+        "default_sigma_joint":  0.0005,
+        "default_sigma_static": 0.0005,
+        "encoder_resolution":   0.00018,  # rad/count — same dVRK encoder family
+        "default_sigma_base":   0.001,
         "color":           "#FFB347",
+    },
+    "Galen": {
+        "label":           "Galen EE  (Surgical Endoscope Manipulator)",
+        "n_joints":        5,
+        "joint_names":     ["carriage1", "carriage2", "carriage3", "roll", "tilt"],
+        "joint_ranges":    [(-0.3, 0.3), (-0.3, 0.3), (-0.3, 0.3),
+                            (-1.5708, 1.5708), (-1.0472, 1.0472)],
+        "fk":              galen_fk,
+        "link_labels":     ["MobilePlatform", "RollArmBase", "TiltDistal", "Tip"],
+        "ambf_namespace":  "/ambf/env/",
+        "ambf_base_link":  "Base",
+        "default_base_pos": [0.0, 0.0, -0.84],
+        "default_sigma_joint":  0.001,
+        "default_sigma_static": 0.001,
+        "encoder_resolution":   0.00018,
+        "default_sigma_base":   0.005,
+        "color":           "#7EC8E3",
     },
     "Raven2": {
         "label":           "Raven2  (⚠ DH params pending)",
@@ -175,8 +253,10 @@ NODES = {
         "ambf_namespace":  "/ambf/env/raven2/",
         "ambf_base_link":  "baselink",
         "default_base_pos": [-0.5, -0.5,  0.0],
-        "default_sigma_joint": 0.001,
-        "default_sigma_base":  0.002,
+        "default_sigma_joint":  0.001,
+        "default_sigma_static": 0.002,
+        "encoder_resolution":   0.00020,  # rad/count — placeholder, needs Raven2 datasheet
+        "default_sigma_base":   0.002,
         "color":           "#DDA0DD",
     },
 }

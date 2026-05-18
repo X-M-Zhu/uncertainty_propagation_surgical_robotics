@@ -38,8 +38,15 @@ def build_network(selections):
     selections : list of dicts, each with keys:
         name          - robot name  (e.g. "PSM")
         joint_angles  - np.array of current joint positions
-        sigma_joint   - float, noise std per joint (rad or m)
-        sigma_base    - float, base registration noise (m)
+        sigma_joint        - float, dynamic motion noise std per joint (rad or m)
+        sigma_static       - float, static error floor: backlash, gear compliance (rad or m)
+        encoder_resolution - float, encoder step size in rad (or m for prismatic)
+                             Models uniform quantization noise; converted to equivalent
+                             Gaussian sigma via  sigma_enc = resolution / sqrt(12)
+        sigma_base         - float, base registration noise (m)
+
+        All three joint error sources are independent and combined in quadrature:
+            sigma_total = sqrt(sigma_static^2 + sigma_enc^2 + sigma_joint^2)
         base_pos      - [x, y, z] of robot base in World frame
 
     Returns
@@ -51,12 +58,24 @@ def build_network(selections):
 
     tip_nodes = {}
     for sel in selections:
-        name    = sel["name"]
-        node    = NODES[name]
-        joints  = sel["joint_angles"]
-        sj      = sel["sigma_joint"]
-        sb      = sel["sigma_base"]
+        name     = sel["name"]
+        node     = NODES[name]
+        joints   = sel["joint_angles"]
+        sj       = sel["sigma_joint"]
+        ss       = sel.get("sigma_static", 0.0)
+        er       = sel.get("encoder_resolution", 0.0)
+        sb       = sel["sigma_base"]
         base_pos = sel["base_pos"]
+
+        # Encoder quantization (uniform distribution) → equivalent Gaussian sigma.
+        # A uniform distribution over one encoder tick has std = tick_size / sqrt(12).
+        sigma_enc = er / np.sqrt(12)
+
+        # Combine all three independent error sources in quadrature:
+        #   sigma_static  — backlash, gear compliance (always present, Gaussian)
+        #   sigma_enc     — encoder quantization (uniform → equivalent Gaussian)
+        #   sigma_joint   — dynamic motion error (grows with velocity, Gaussian)
+        sigma_total = np.sqrt(ss**2 + sigma_enc**2 + sj**2)
 
         # World → RobotBase (base registration uncertainty)
         T_base = _base_transform(base_pos)
@@ -78,7 +97,7 @@ def build_network(selections):
             cur_frame = f"{name}_{label}"
             T_step = np.linalg.inv(prev_T) @ T_k_0
             net.add_edge(prev_frame, cur_frame,
-                         _make_uncertain_transform(T_step, sj, sj))
+                         _make_uncertain_transform(T_step, sigma_total, sigma_total))
             prev_T = T_k_0
             prev_frame = cur_frame
 
