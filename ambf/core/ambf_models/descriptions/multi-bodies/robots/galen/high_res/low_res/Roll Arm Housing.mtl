@@ -1,0 +1,12 @@
+# Blender MTL File: 'None'
+# Material Count: 1
+
+newmtl Roll_Arm_Housingmat
+Ns 323.999994
+Ka 1.000000 1.000000 1.000000
+Kd 1.000000 0.904700 0.104400
+Ks 0.482200 0.482200 0.482200
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
