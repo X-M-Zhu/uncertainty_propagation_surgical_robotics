@@ -878,6 +878,112 @@ class GeometricNetwork:
         return d, var_d
 
     # ---------------------------------------------------------------- #
+    #  Loop-closure queries                                            #
+    # ---------------------------------------------------------------- #
+
+    def query_closed_loop_posterior(
+        self,
+        path_res: List[str],
+        path_k: List[str],
+        C_nu: Optional[Array] = None,
+    ) -> "LoopPosterior":
+        """
+        Condition on a single loop-closure constraint.
+
+        Composes the uncertain transform along each path, linearises the loop
+        residual r = Log(T_res^{-1} T_k), and applies a Gaussian information
+        update to obtain posterior covariances for both paths.
+
+        Parameters
+        ----------
+        path_res : list[str]
+            Reference path (list of frame names, same start and end as path_k).
+        path_k : list[str]
+            Alternative path.
+        C_nu : (6,6) ndarray, optional
+            Loop noise covariance. Default: 1e-9 * I (tight constraint).
+
+        Returns
+        -------
+        LoopPosterior
+            .C_res   — posterior covariance of the reference path transform
+            .C_k     — posterior covariance of the alternative path transform
+            .C_cross — cross-covariance between the two
+            .C_full  — full 12×12 joint posterior
+        """
+        from .closed_loop import linearize_loop_residual, condition_on_loop
+
+        T_res = self.query_transform_on_path(path_res).transform
+        T_k   = self.query_transform_on_path(path_k).transform
+        lin   = linearize_loop_residual(T_res.F_nom, T_k.F_nom)
+        return condition_on_loop(T_res.C, T_k.C, lin, C_nu=C_nu)
+
+    def query_auto_loop_posterior(
+        self,
+        start: str,
+        goal: str,
+        C_nu: Optional[Array] = None,
+        max_depth: Optional[int] = None,
+    ) -> "LoopPosterior":
+        """
+        Automatically discover all simple paths from start to goal and apply
+        every independent loop-closure constraint simultaneously.
+
+        The first path found is used as the reference; every additional path
+        forms one loop constraint against it. All constraints are applied in a
+        single joint information update.
+
+        Parameters
+        ----------
+        start, goal : str
+        C_nu : (6,6) ndarray, optional
+            Loop noise covariance applied to every constraint. Default: 1e-9 * I.
+        max_depth : int, optional
+            Limit DFS depth for large networks.
+
+        Returns
+        -------
+        LoopPosterior  (reference = first path found)
+
+        Raises
+        ------
+        ValueError
+            If fewer than two paths exist between start and goal.
+        """
+        from .closed_loop import (
+            linearize_loop_residual,
+            condition_on_loop,
+            condition_on_multiple_loops,
+            LoopLinearization,
+        )
+
+        paths = self.find_all_paths(start, goal, max_depth=max_depth)
+        if len(paths) < 2:
+            raise ValueError(
+                f"query_auto_loop_posterior requires at least 2 paths from "
+                f"'{start}' to '{goal}', found {len(paths)}."
+            )
+
+        T_res = self.query_transform_on_path(paths[0]).transform
+
+        if len(paths) == 2:
+            T_k  = self.query_transform_on_path(paths[1]).transform
+            lin  = linearize_loop_residual(T_res.F_nom, T_k.F_nom)
+            return condition_on_loop(T_res.C, T_k.C, lin, C_nu=C_nu)
+
+        # Multiple alternative paths — joint update.
+        alt_transforms = [
+            self.query_transform_on_path(p).transform for p in paths[1:]
+        ]
+        lins = [
+            linearize_loop_residual(T_res.F_nom, T_k.F_nom)
+            for T_k in alt_transforms
+        ]
+        C_ks    = [T_k.C for T_k in alt_transforms]
+        C_nu_list = [C_nu] * len(lins) if C_nu is not None else None
+        return condition_on_multiple_loops(T_res.C, C_ks, lins, C_nu_list=C_nu_list)
+
+    # ---------------------------------------------------------------- #
     #  Batch utilities                                                  #
     # ---------------------------------------------------------------- #
 
