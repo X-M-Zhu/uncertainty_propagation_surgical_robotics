@@ -2,29 +2,61 @@
 Author: X.M. Christine Zhu
 Date: 04/04/2026
 
-Unified Gaussian linear system framework for uncertainty propagation
-through geometric relationships on SE(3), following the CIS I
-left-multiplicative perturbation convention and the structural
-identification approach from Doc 2.
+uncertainty-networks
+====================
+Uncertainty propagation through geometric networks on SE(3),
+following the CIS I left-multiplicative perturbation convention.
 
-The main entry points are:
+Quick start
+-----------
+    from uncertainty_networks import GeometricNetwork, UncertainTransform
+    import numpy as np
 
-    GeometricNetwork   — build a frame graph, add edges and points
-    query_frame()      — fused multi-path query (handles all topologies)
-    query()            — single shortest-path query
-    query_point()      — propagate a point into any frame
-    query_relative_vector() — correlation-aware relative vector
-    query_distance()   — Euclidean distance with first-order variance
+    net = GeometricNetwork()
+    F   = np.eye(4); F[:3, 3] = [0.3, 0, 0]
+    net.add_edge("World", "Tool", UncertainTransform(F, 0.002**2 * np.eye(6)))
+    result = net.query_frame("World", "Tool")
 
+See API_REFERENCE.md for the complete public API.
 Mathematical reference: docs/math_note.pdf
 """
 
 from .uncertain_geometry import UncertainTransform
-from .network import GeometricNetwork, PathResult, FusedQueryResult
+from .network import (
+    GeometricNetwork,
+    PathResult,
+    FusedQueryResult,
+)
+from .observations import (
+    Observation,
+    LoopObservation,
+    PointObservation,
+    DistanceObservation,
+    condition_on_observations,
+    ConditioningResult,
+)
+from .closed_loop import (
+    LoopPosterior,
+    condition_on_loop,
+    fuse_gaussian_covs,
+)
 
 __all__ = [
+    # Core geometry
     "UncertainTransform",
+    # Network
     "GeometricNetwork",
     "PathResult",
     "FusedQueryResult",
+    # Observations / conditioning
+    "Observation",
+    "LoopObservation",
+    "PointObservation",
+    "DistanceObservation",
+    "condition_on_observations",
+    "ConditioningResult",
+    # Loop utilities
+    "LoopPosterior",
+    "condition_on_loop",
+    "fuse_gaussian_covs",
 ]

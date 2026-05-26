@@ -1,7 +1,27 @@
 # Simulation-Based Uncertainty Propagation in Geometric Networks for Surgical Robotics
 
-**Author:** X.M. Christine Zhu<br>
-**Mentor:** Dr. Russell H. Taylor
+**Author:** X.M. Christine Zhu &nbsp;·&nbsp; **Mentor:** Dr. Russell H. Taylor
+
+---
+
+## Student Quick Start
+
+> **Requires Python 3.10 or later.** No need to download or clone anything.
+
+**1. Install**
+```bash
+pip install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git"
+```
+
+**2. Launch the GUI**
+```bash
+uncertainty-gui
+```
+
+That's it. The visualiser will open.  
+For the full API reference see [API_REFERENCE.md](API_REFERENCE.md).
+
+---
 
 This repository implements and validates a mathematical framework for **uncertainty propagation in geometric networks**, following the CIS I left-multiplicative perturbation convention.
 
@@ -30,36 +50,28 @@ The math is documented in `docs/` and `PSEUDOCODE.md`.
 
 ## Installation
 
-### 1. Clone the repository
+### For students (using the tool)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/kinematic-uncertainty-networks.git
-cd kinematic-uncertainty-networks
+pip install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git"
+uncertainty-gui
 ```
 
-### 2. Create and activate a Python environment
+### For developers (editing the code)
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate        # macOS / Linux
-# or
-venv\Scripts\activate           # Windows
+git clone https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git
+cd uncertainty_propagation_surgical_robotics
+pip install -e ".[gui]"
 ```
 
-### 3. Install the package
-
-```bash
-pip install -e .
-```
-
-### 4. Verify
+Verify the install:
 
 ```bash
 pytest
 ```
 
-All tests should pass. They cover SE(3) operations, covariance propagation, point uncertainty,
-network queries, and closed-loop conditioning.
+All tests should pass.
 
 ---
 

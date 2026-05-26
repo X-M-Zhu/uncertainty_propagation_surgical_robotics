@@ -5,15 +5,58 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "uncertainty-networks"
 version = "0.1.0"
-description = "Simulation-based uncertainty propagation in geometric networks (SE(3))"
+description = "Uncertainty propagation through geometric networks for surgical robotics (SE(3), CIS I convention)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "X.M. Christine Zhu"}]
+authors = [{ name = "X.M. Christine Zhu" }]
+keywords = [
+    "robotics", "surgical-robotics", "uncertainty-propagation",
+    "SE3", "covariance", "kinematics", "geometric-networks",
+    "CIS", "Lie-group",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
 dependencies = ["numpy>=1.23"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "ruff>=0.1.0", "matplotlib>=3.6"]
+# Install the full GUI + visualisation stack:
+#   pip install uncertainty-networks[gui]
+gui = [
+    "matplotlib>=3.6",
+    "plotly>=5.0",
+]
+dev = ["pytest>=7.0", "ruff>=0.1.0", "matplotlib>=3.6", "plotly>=5.0"]
+
+[project.scripts]
+# After pip install uncertainty-networks[gui], students run:
+#   uncertainty-gui
+uncertainty-gui = "simulation.gui:main"
+
+[project.urls]
+"Source Code"   = "https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics"
+"Documentation" = "https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics#readme"
+"Bug Tracker"   = "https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics/issues"
+
+# Package discovery
+# uncertainty_networks lives in src/; simulation lives at repo root.
+[tool.setuptools]
+packages = ["uncertainty_networks", "simulation"]
+
+[tool.setuptools.package-dir]
+""           = "src"
+"simulation" = "simulation"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
