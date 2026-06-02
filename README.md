@@ -55,6 +55,8 @@ The GUI has two modes:
 - **Mock mode** (default) — joint angles driven by sine waves. No AMBF or ROS needed. Works on any platform.
 - **Live mode** — joint angles streamed from a running AMBF simulator via `simulation/ambf_bridge.py`. Requires AMBF + ROS in a Linux environment.
 
+---
+
 ### For Linux users
 
 **1. Install ROS Noetic**
