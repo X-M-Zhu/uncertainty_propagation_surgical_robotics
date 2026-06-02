@@ -201,14 +201,26 @@ AMBF does not have a native macOS build. The recommended approach is **VMware Fu
 
 **Step 1 — Download VMware Fusion**
 
-Go to [https://www.vmware.com/products/fusion.html](https://www.vmware.com/products/fusion.html) and download VMware Fusion. It is free for personal use. Open the downloaded `.dmg` file and drag VMware Fusion into your Applications folder to install it.
+Go to [https://www.vmware.com/products/fusion.html](https://www.vmware.com/products/fusion.html) and download VMware Fusion. It is free for personal use. If you see multiple versions listed (e.g. 26H1, 25H2, 13), always choose the **newest one** (the highest number). Open the downloaded `.dmg` file and drag VMware Fusion into your Applications folder to install it.
 
-**Step 2 — Download the Ubuntu 20.04 ISO**
+**Step 2 — Download the correct Ubuntu ISO for your Mac**
 
-An ISO file is a disk image — it contains everything needed to install Ubuntu Linux. Download it from:
-[https://releases.ubuntu.com/20.04/](https://releases.ubuntu.com/20.04/)
+An ISO file is a disk image — it contains everything needed to install Ubuntu Linux.
+**You must download the right version for your chip, or VMware will not let you continue.**
 
-Click the link named **64-bit PC (AMD64) desktop image**. The file will be named something like `ubuntu-20.04.6-desktop-amd64.iso` and is about 3 GB. Wait for the download to finish before continuing.
+First, check your chip: click the **Apple menu () → About This Mac**. Look for the Chip or Processor line.
+
+- **Apple Silicon (M1 / M2 / M3 / M4)** — go to:
+  [https://cdimage.ubuntu.com/releases/20.04/release/](https://cdimage.ubuntu.com/releases/20.04/release/)
+  Download the file named **`ubuntu-20.04.x-desktop-arm64.iso`** (~3 GB).
+
+- **Intel** — go to:
+  [https://releases.ubuntu.com/20.04/](https://releases.ubuntu.com/20.04/)
+  Download the file named **`ubuntu-20.04.x-desktop-amd64.iso`** (~3 GB).
+
+Both use **ROS Noetic** — the Linux steps below apply to both without any changes.
+
+Wait for the download to finish completely before continuing.
 
 **Step 3 — Create a new virtual machine**
 
