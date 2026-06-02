@@ -73,7 +73,15 @@ echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
-**2. Clone and build AMBF**
+**2. Install AMBF build dependencies**
+
+```bash
+sudo apt install -y libasound2-dev libgl1-mesa-dev freeglut3-dev \
+    libglfw3-dev libusb-dev libxrandr-dev libxinerama-dev \
+    libxcursor-dev libxi-dev python3-tk python3-pil.imagetk
+```
+
+**3. Clone and build AMBF**
 
 ```bash
 cd ~
@@ -81,34 +89,43 @@ git clone https://github.com/WPI-AIM/ambf.git --recurse-submodules
 cd ambf
 mkdir -p build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake ../core -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
 
-**3. Install ambf_client**
+**4. Install ambf_client**
 
 ```bash
 cd ~/ambf/ros_modules/ambf_client
+sed -i "s/scripts=\[''\]/scripts=[]/" setup.py
 pip3 install .
 ```
 
-**4. Run AMBF**
-
-```bash
-cd ~/ambf/build
-./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
-```
-
-**5. Launch the GUI in Live mode**
-
-With AMBF running, you can start the bridge manually in a second terminal:
+**5. Run AMBF**
 
 ```bash
 source /opt/ros/noetic/setup.bash
-python3 simulation/ambf_bridge.py PSM ECM
+cd ~/ambf/build
+./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 0,1,2
 ```
 
-Or simply launch the GUI, select **Live (AMBF)** mode — it starts the bridge automatically.
+**6. Install the GUI**
+
+```bash
+pip install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**7. Launch the GUI**
+
+With AMBF running in one terminal, open a second terminal and run:
+
+```bash
+uncertainty-gui
+```
+
+Select robots and click **Live (AMBF)** — the GUI starts the bridge automatically.
 
 ---
 
@@ -142,7 +159,15 @@ sudo rosdep init && rosdep update
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 ```
 
-**3. Clone and build AMBF inside WSL2**
+**3. Install AMBF build dependencies inside WSL2**
+
+```bash
+sudo apt install -y libasound2-dev libgl1-mesa-dev freeglut3-dev \
+    libglfw3-dev libusb-dev libxrandr-dev libxinerama-dev \
+    libxcursor-dev libxi-dev python3-tk python3-pil.imagetk
+```
+
+**4. Clone and build AMBF inside WSL2**
 
 ```bash
 cd ~
@@ -150,24 +175,25 @@ git clone https://github.com/WPI-AIM/ambf.git --recurse-submodules
 cd ambf
 mkdir -p build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake ../core -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
 
-**4. Install ambf_client inside WSL2**
+**5. Install ambf_client inside WSL2**
 
 ```bash
 cd ~/ambf/ros_modules/ambf_client
+sed -i "s/scripts=\[''\]/scripts=[]/" setup.py
 pip3 install .
 ```
 
-**5. Run AMBF inside WSL2**
+**6. Run AMBF inside WSL2**
 
 - **Windows 11** — WSLg provides a display automatically:
   ```bash
   source /opt/ros/noetic/setup.bash
   cd ~/ambf/build
-  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 0,1,2
   ```
 
 - **Windows 10** — install [VcXsrv](https://sourceforge.net/projects/vcxsrv/), launch it (check *Disable access control*), then in WSL:
@@ -175,13 +201,15 @@ pip3 install .
   export DISPLAY=$(grep nameserver /etc/resolv.conf | awk '{print $2}'):0
   source /opt/ros/noetic/setup.bash
   cd ~/ambf/build
-  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 0,1,2
   ```
 
-**6. Launch the GUI on Windows**
+**7. Launch the GUI on Windows**
 
 ```bash
-pip install "uncertainty-networks[gui]"
+pip install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git"
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
 uncertainty-gui
 ```
 
@@ -245,22 +273,25 @@ Download the file named **`ubuntu-20.04.5-live-server-arm64.iso`** (~1.5 GB). Wa
 After rebooting, a text login prompt appears. Type your username and password, then run:
 
 ```bash
+sudo sed -i '/cdrom/d' /etc/apt/sources.list
 sudo apt update
 sudo apt install -y ubuntu-desktop
 sudo reboot
 ```
 
+> The `sed` command removes the installer CD-ROM from the apt sources list. Without it, `apt update` will show a harmless but annoying error and may block some packages from being found.
+
 This takes about 10 minutes. After rebooting, Ubuntu will start with a full graphical desktop. Log in.
 
-**Step 4 — Open a terminal in Ubuntu**
+**Step 6 — Open a terminal in Ubuntu**
 
 Press **Ctrl + Option (⌥) + T** inside the UTM window. A terminal will open.
 
-**Step 5 — Install ROS Noetic, AMBF, and the GUI**
+**Step 7 — Install ROS Noetic, AMBF, and the GUI**
 
-Follow the **Linux** steps in the section above, starting from "Install ROS Noetic". Run every command in the Ubuntu terminal inside UTM.
+Follow the **Linux** steps in the section above (starting from "Install ROS Noetic"). Run every command in the Ubuntu terminal inside UTM. They are identical — no changes needed for ARM64.
 
-**Step 6 — Run everything**
+**Step 8 — Run everything**
 
 Open two terminal windows inside UTM (**Ctrl + Option (⌥) + T** twice):
 
@@ -268,7 +299,7 @@ Open two terminal windows inside UTM (**Ctrl + Option (⌥) + T** twice):
   ```bash
   source /opt/ros/noetic/setup.bash
   cd ~/ambf/build
-  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 0,1,2
   ```
 
 - **Terminal 2** — launch the GUI:
@@ -329,7 +360,7 @@ Open two terminals inside VMware (**Ctrl + Option (⌥) + T** twice):
   ```bash
   source /opt/ros/noetic/setup.bash
   cd ~/ambf/build
-  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 0,1,2
   ```
 
 - **Terminal 2** — launch the GUI:
@@ -361,7 +392,7 @@ Open two terminal windows inside the VM (**Ctrl + Option (⌥) + T** twice):
   ```bash
   source /opt/ros/noetic/setup.bash
   cd ~/ambf/build
-  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 0,1,2
   ```
 
 - **Terminal 2** — launch the GUI:
