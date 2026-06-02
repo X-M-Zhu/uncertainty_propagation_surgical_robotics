@@ -67,7 +67,7 @@ sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu focal main" \
 sudo apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' \
     --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
 sudo apt update
-sudo apt install -y ros-noetic-desktop-full python3-rosdep python3-catkin-tools
+sudo apt install -y ros-noetic-desktop-full python3-rosdep python3-catkin-tools python3-pip
 sudo rosdep init && rosdep update
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 source ~/.bashrc
@@ -135,7 +135,7 @@ sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu focal main" \
 sudo apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' \
     --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
 sudo apt update
-sudo apt install -y ros-noetic-desktop-full python3-rosdep python3-catkin-tools
+sudo apt install -y ros-noetic-desktop-full python3-rosdep python3-catkin-tools python3-pip
 sudo rosdep init && rosdep update
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 ```
@@ -197,60 +197,145 @@ wsl bash -lc "source /opt/ros/noetic/setup.bash && python3 /mnt/c/.../ambf_bridg
 
 ### For macOS users
 
-AMBF does not have a native macOS build. The recommended approach is **VMware Fusion** — a virtual machine app that creates a full Linux computer running inside your Mac. Think of it as a second computer living in a window on your screen. AMBF, ROS, and the GUI all run inside that Linux window, exactly as they do on a real Linux machine.
+AMBF does not have a native macOS build. You need a virtual machine — a program that runs a full Linux computer inside a window on your Mac.
+
+First, check your chip: click **Apple menu () → About This Mac** and look at the Chip or Processor line.
+
+- **Apple Silicon (M1 / M2 / M3 / M4)** → use **UTM** (free, built for Apple Silicon)
+- **Intel** → use **VMware Fusion** (free for personal use)
+
+---
+
+#### Apple Silicon (M1 / M2 / M3 / M4) — UTM
+
+**Step 1 — Download UTM**
+
+Go to [https://mac.getutm.app](https://mac.getutm.app) and click **Download**. Open the `.dmg` file and drag UTM into your Applications folder.
+
+**Step 2 — Download the Ubuntu 20.04 ARM64 ISO**
+
+The UTM Gallery only has Ubuntu 14.04 and 22.04, so you need to add Ubuntu 20.04 manually using an ISO file. Go to:
+[https://cdimage.ubuntu.com/releases/20.04/release/](https://cdimage.ubuntu.com/releases/20.04/release/)
+
+Download the file named **`ubuntu-20.04.5-live-server-arm64.iso`** (~1.5 GB). Wait for it to finish completely.
+
+**Step 3 — Create a VM manually in UTM**
+
+1. Open UTM → click **+** → click **Virtualize** (not Emulate).
+2. Click **Linux**.
+3. Click **Browse**, select the `.iso` file you just downloaded, then click **Continue**.
+4. Set **RAM** to **4096 MB** → click **Continue**.
+5. Set **disk size** to **40 GB** → click **Continue**.
+6. Click **Save**.
+
+**Step 4 — Install Ubuntu Server**
+
+1. Click the **Play** button next to your new VM.
+2. A text-based installer appears. Use the arrow keys to navigate, Enter to confirm.
+3. Select **Install Ubuntu Server**, then wait until you see choose your language→ follow the prompts.
+4. When asked, set a username and password you will remember.
+5. When installation finishes, select **Reboot Now**.
+
+**Step 5 — Add the graphical desktop (one-time setup)**
+
+After rebooting, a text login prompt appears. Type your username and password, then run:
+
+```bash
+sudo apt update
+sudo apt install -y ubuntu-desktop
+sudo reboot
+```
+
+This takes about 10 minutes. After rebooting, Ubuntu will start with a full graphical desktop. Log in.
+
+**Step 4 — Open a terminal in Ubuntu**
+
+Press **Ctrl + Option (⌥) + T** inside the UTM window. A terminal will open.
+
+**Step 5 — Install ROS Noetic, AMBF, and the GUI**
+
+Follow the **Linux** steps in the section above, starting from "Install ROS Noetic". Run every command in the Ubuntu terminal inside UTM.
+
+**Step 6 — Run everything**
+
+Open two terminal windows inside UTM (**Ctrl + Option (⌥) + T** twice):
+
+- **Terminal 1** — start AMBF:
+  ```bash
+  source /opt/ros/noetic/setup.bash
+  cd ~/ambf/build
+  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ```
+
+- **Terminal 2** — launch the GUI:
+  ```bash
+  uncertainty-gui
+  ```
+
+---
+
+#### Intel Mac — VMware Fusion
 
 **Step 1 — Download VMware Fusion**
 
-Go to [https://www.vmware.com/products/fusion.html](https://www.vmware.com/products/fusion.html) and download VMware Fusion. It is free for personal use. If you see multiple versions listed (e.g. 26H1, 25H2, 13), always choose the **newest one** (the highest number). Open the downloaded `.dmg` file and drag VMware Fusion into your Applications folder to install it.
+Go to [https://www.vmware.com/products/fusion.html](https://www.vmware.com/products/fusion.html) and download VMware Fusion. It is free for personal use. If you see multiple versions listed (e.g. 26H1, 25H2, 13), always choose the **newest one**. Open the `.dmg` and drag VMware Fusion into your Applications folder.
 
-**Step 2 — Download the correct Ubuntu ISO for your Mac**
+**Step 2 — Download the Ubuntu 20.04 ISO**
 
-An ISO file is a disk image — it contains everything needed to install Ubuntu Linux.
-**You must download the right version for your chip, or VMware will not let you continue.**
+An ISO file is a disk image containing everything needed to install Ubuntu. Go to:
+[https://releases.ubuntu.com/20.04/](https://releases.ubuntu.com/20.04/)
 
-First, check your chip: click the **Apple menu () → About This Mac**. Look for the Chip or Processor line.
-
-- **Apple Silicon (M1 / M2 / M3 / M4)** — go to:
-  [https://cdimage.ubuntu.com/releases/20.04/release/](https://cdimage.ubuntu.com/releases/20.04/release/)
-  Download the file named **`ubuntu-20.04.x-desktop-arm64.iso`** (~3 GB).
-
-- **Intel** — go to:
-  [https://releases.ubuntu.com/20.04/](https://releases.ubuntu.com/20.04/)
-  Download the file named **`ubuntu-20.04.x-desktop-amd64.iso`** (~3 GB).
-
-Both use **ROS Noetic** — the Linux steps below apply to both without any changes.
-
-Wait for the download to finish completely before continuing.
+Download **`ubuntu-20.04.x-desktop-amd64.iso`** (~3 GB). Wait for the download to finish completely.
 
 **Step 3 — Create a new virtual machine**
 
-1. Open VMware Fusion from your Applications folder.
+1. Open VMware Fusion.
 2. Click **File → New** (or the **+** button).
-3. Drag the downloaded `.iso` file into the window that appears, then click **Continue**.
-4. Select **Linux → Ubuntu 64-bit** if prompted for the operating system type, then click **Continue**.
-5. On the **Finish** screen, click **Customize Settings** before clicking Finish.
-   - Set **Processors & Memory** to at least **4 CPU cores** and **8 GB RAM**.
-   - Set **Hard Disk** to at least **40 GB**.
-6. Close the settings window, then click **Finish**. The VM will start.
+3. Drag the downloaded `.iso` file into the window, or click **Use another disc or disc image...** to browse to it.
+4. If asked for the operating system type, select **Linux → Ubuntu 64-bit**, then click **Continue**.
+5. Click **Customize Settings** and set at least **4 CPU cores**, **8 GB RAM**, and **40 GB disk**.
+6. Click **Finish**. The VM will start.
 
 **Step 4 — Install Ubuntu inside the VM**
 
-A purple Ubuntu installer screen will appear inside the VMware window.
+A purple Ubuntu installer screen will appear.
 
-1. Click **Install Ubuntu**.
-2. Choose your keyboard layout and click **Continue**.
-3. Select **Normal installation** and click **Continue**.
-4. Select **Erase disk and install Ubuntu** (this only erases the virtual disk, not your Mac), then click **Install Now → Continue**.
-5. Choose your time zone and click **Continue**.
-6. Enter your name, a computer name, a username, and a password. Click **Continue**.
-7. Wait 10–15 minutes for installation to complete. Click **Restart Now** when prompted.
-8. Press Enter when asked to remove the installation medium (VMware handles this automatically).
+1. Click **Install Ubuntu** → choose your keyboard → click **Continue**.
+2. Select **Normal installation** → click **Continue**.
+3. Select **Erase disk and install Ubuntu** (this only erases the virtual disk, not your Mac) → **Install Now → Continue**.
+4. Choose your time zone → click **Continue**.
+5. Enter a name, username, and password → click **Continue**.
+6. Wait 10–15 minutes. Click **Restart Now** when prompted.
 
-Ubuntu will boot to a desktop inside the VMware window. Log in with the password you set.
+Ubuntu will boot to a desktop inside VMware. Log in with the password you set.
+
+**Step 5 — Open a terminal**
+
+Press **Ctrl + Option (⌥) + T** inside the VMware window.
+
+**Step 6 — Install ROS Noetic, AMBF, and the GUI**
+
+Follow the **Linux** steps in the section above, starting from "Install ROS Noetic".
+
+**Step 7 — Run everything**
+
+Open two terminals inside VMware (**Ctrl + Option (⌥) + T** twice):
+
+- **Terminal 1** — start AMBF:
+  ```bash
+  source /opt/ros/noetic/setup.bash
+  cd ~/ambf/build
+  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ```
+
+- **Terminal 2** — launch the GUI:
+  ```bash
+  uncertainty-gui
+  ```
 
 **Step 5 — Open a Terminal in Ubuntu**
 
-Press **Ctrl + Alt + T** on your keyboard. A terminal window will open — this is where you type commands. All the following steps use this terminal.
+Press **Ctrl + Option (⌥) + T** on your keyboard. A terminal window will open — this is where you type commands. All the following steps use this terminal.
 
 **Step 6 — Install ROS Noetic, AMBF, and ambf_client**
 
@@ -266,7 +351,7 @@ pip3 install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncerta
 
 **Step 8 — Run everything**
 
-Open two terminal windows inside the VM (**Ctrl + Alt + T** twice):
+Open two terminal windows inside the VM (**Ctrl + Option (⌥) + T** twice):
 
 - **Terminal 1** — start AMBF:
   ```bash
