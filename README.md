@@ -14,9 +14,9 @@ The math is documented in `docs/` and `PSEUDOCODE.md`.
 
 ---
 
-### Installation
+## Installation
 
-## For CIS I students (using the tool)
+### For CIS I students
 > **Requires Python 3.10 or later.** No need to download or clone anything.
 
 **1. Install**
@@ -32,7 +32,7 @@ uncertainty-gui
 That's it. The visualiser will open.  
 For the full API reference see [API_REFERENCE.md](API_REFERENCE.md).
 
-## For developers (editing the code)
+### For developers
 
 ```bash
 git clone https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git
@@ -55,7 +55,7 @@ The GUI has two modes:
 - **Mock mode** (default) — joint angles driven by sine waves. No AMBF or ROS needed. Works on any platform.
 - **Live mode** — joint angles streamed from a running AMBF simulator via `simulation/ambf_bridge.py`. Requires AMBF + ROS in a Linux environment.
 
-#### For Linux users:
+### For Linux users
 
 **1. Install ROS Noetic**
 
@@ -108,7 +108,7 @@ Or simply launch the GUI, select **Live (AMBF)** mode — it starts the bridge a
 
 ---
 
-#### For Windows users: (via WSL2)
+### For Windows users (via WSL2)
 
 `simulate.py` spawns the bridge inside WSL2 from Windows via `wsl bash -lc "..."`.
 AMBF itself runs in WSL2; the GUI runs natively on Windows.
@@ -193,7 +193,7 @@ wsl bash -lc "source /opt/ros/noetic/setup.bash && python3 /mnt/c/.../ambf_bridg
 
 ---
 
-#### For macOS users:
+### For macOS users
 
 AMBF does not have a native macOS build. The recommended approach is to use **VMware Fusion**, a virtual machine app for macOS that runs a full Linux environment inside your Mac. AMBF and ROS then run exactly as they do on native Linux.
 
