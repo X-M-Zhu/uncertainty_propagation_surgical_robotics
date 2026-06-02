@@ -7,7 +7,7 @@ name = "uncertainty-networks"
 version = "0.1.0"
 description = "Uncertainty propagation through geometric networks for surgical robotics (SE(3), CIS I convention)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 license = { text = "MIT" }
 authors = [{ name = "X.M. Christine Zhu" }]
 keywords = [
