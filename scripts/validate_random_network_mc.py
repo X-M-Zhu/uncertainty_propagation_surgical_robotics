@@ -263,7 +263,7 @@ def main():
             sampled_forward = {}
             for eid, info in edge_catalog.items():
                 eta = rng.multivariate_normal(mean0_6, info["C"])
-                sampled_forward[eid] = exp_se3(eta) @ info["T_nom"]
+                sampled_forward[eid] = info["T_nom"] @ exp_se3(eta)
 
             # Transform points to query frame
             T_src_q = apply_edge_sequence(seq_src, sampled_forward)

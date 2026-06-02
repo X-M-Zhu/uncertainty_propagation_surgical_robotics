@@ -128,15 +128,15 @@ def main():
 
     for i in range(N):
         # sample each transform
-        T_w_trk_s = exp_se3(rng.multivariate_normal(mean0_6, nom["W_Trk"][1])) @ nom["W_Trk"][0]
-        T_w_ct_s  = exp_se3(rng.multivariate_normal(mean0_6, nom["W_CT"][1]))  @ nom["W_CT"][0]
-        T_w_rb_s  = exp_se3(rng.multivariate_normal(mean0_6, nom["W_Rb"][1]))  @ nom["W_Rb"][0]
+        T_w_trk_s = nom["W_Trk"][0] @ exp_se3(rng.multivariate_normal(mean0_6, nom["W_Trk"][1]))
+        T_w_ct_s  = nom["W_CT"][0]  @ exp_se3(rng.multivariate_normal(mean0_6, nom["W_CT"][1]))
+        T_w_rb_s  = nom["W_Rb"][0]  @ exp_se3(rng.multivariate_normal(mean0_6, nom["W_Rb"][1]))
 
-        T_trk_cam_s = exp_se3(rng.multivariate_normal(mean0_6, nom["Trk_Cam"][1])) @ nom["Trk_Cam"][0]
-        T_cam_mk_s  = exp_se3(rng.multivariate_normal(mean0_6, nom["Cam_Mk"][1]))  @ nom["Cam_Mk"][0]
+        T_trk_cam_s = nom["Trk_Cam"][0] @ exp_se3(rng.multivariate_normal(mean0_6, nom["Trk_Cam"][1]))
+        T_cam_mk_s  = nom["Cam_Mk"][0]  @ exp_se3(rng.multivariate_normal(mean0_6, nom["Cam_Mk"][1]))
 
-        T_rb_tool_s = exp_se3(rng.multivariate_normal(mean0_6, nom["Rb_Tool"][1])) @ nom["Rb_Tool"][0]
-        T_ct_anat_s = exp_se3(rng.multivariate_normal(mean0_6, nom["CT_Anat"][1])) @ nom["CT_Anat"][0]
+        T_rb_tool_s = nom["Rb_Tool"][0] @ exp_se3(rng.multivariate_normal(mean0_6, nom["Rb_Tool"][1]))
+        T_ct_anat_s = nom["CT_Anat"][0] @ exp_se3(rng.multivariate_normal(mean0_6, nom["CT_Anat"][1]))
 
         # intrinsic point noise
         dp_src = rng.multivariate_normal(mean0_3, Cp)

@@ -194,11 +194,12 @@ class PointObservation(Observation):
     Residual (3-dimensional):
         r = p_nom - z
 
-    Jacobian (CIS I left-perturbation):
-        J_eta = [-[p_nom]x  |  I_3]        shape (3, 6)
+    Jacobian (CIS I right-perturbation):
+        J_eta = [-R [p_in]x  |  R]         shape (3, 6)
 
-    This says: a 6D pose perturbation eta = [alpha; epsilon] shifts the
-    point by  delta_p ≈ -[p_nom]x @ alpha + epsilon.
+    where R is the rotation of the nominal transform and p_in is the input
+    point (before transformation).  When F_nom is not provided, falls back to
+    the identity approximation  J_eta = [-[p_nom]x | I_3].
 
     Parameters
     ----------
@@ -215,8 +216,9 @@ class PointObservation(Observation):
 
     Class method
     ------------
-    PointObservation.build(p_nom, key, z, C_nu)
-        Constructs the Jacobian automatically from p_nom using the CIS I formula.
+    PointObservation.build(p_nom, key, z, C_nu, F_nom=None)
+        Constructs the Jacobian automatically using the CIS I right-perturbation
+        formula when F_nom is provided.
     """
 
     def __init__(
@@ -240,11 +242,17 @@ class PointObservation(Observation):
         key: str,
         z: Array,
         C_nu: Array,
+        F_nom: Optional[Array] = None,
     ) -> "PointObservation":
         """
-        Construct a PointObservation, computing J_eta from p_nom via CIS I formula.
+        Construct a PointObservation, computing J_eta via CIS I right-perturbation.
 
-        J_eta = [-[p_nom]x | I_3]   shape (3, 6)
+        If F_nom is provided:
+            p_in  = R^T (p_nom - t)              (recover input point)
+            J_eta = [-R [p_in]x | R]             shape (3, 6)
+
+        If F_nom is None (identity approximation):
+            J_eta = [-[p_nom]x | I_3]            shape (3, 6)
 
         Parameters
         ----------
@@ -256,9 +264,18 @@ class PointObservation(Observation):
             Measured position.
         C_nu : (3,3) ndarray
             Measurement noise.
+        F_nom : (4,4) ndarray, optional
+            Nominal SE(3) transform used to compute the right-convention Jacobian.
         """
         p = np.asarray(p_nom, dtype=float).reshape(3)
-        J_eta = np.hstack([-skew(p), np.eye(3)])  # (3, 6)
+        if F_nom is not None:
+            F = np.asarray(F_nom, dtype=float).reshape(4, 4)
+            R = F[:3, :3]
+            t = F[:3, 3]
+            p_in = R.T @ (p - t)
+            J_eta = np.hstack([-R @ skew(p_in), R])
+        else:
+            J_eta = np.hstack([-skew(p), np.eye(3)])
         return cls(p_nom=p, J_eta=J_eta, key=key, z=z, C_nu=C_nu)
 
     def residual(self) -> Array:
@@ -311,8 +328,10 @@ class DistanceObservation(Observation):
 
     Class method
     ------------
-    DistanceObservation.build(p1_nom, p2_nom, key_1, key_2, z, sigma)
-        Constructs both Jacobians automatically from the CIS I formula.
+    DistanceObservation.build(p1_nom, p2_nom, key_1, key_2, z, sigma,
+                               F_nom_1=None, F_nom_2=None)
+        Constructs both Jacobians using CIS I right-perturbation when
+        F_nom_i is provided; falls back to identity approximation otherwise.
     """
 
     def __init__(
@@ -344,16 +363,38 @@ class DistanceObservation(Observation):
         key_2: str,
         z: float,
         sigma: float,
+        F_nom_1: Optional[Array] = None,
+        F_nom_2: Optional[Array] = None,
     ) -> "DistanceObservation":
         """
-        Construct a DistanceObservation, computing both J_eta from CIS I formula.
+        Construct a DistanceObservation using CIS I right-perturbation Jacobians.
 
-        J_eta_i = [-[p_i]x | I_3]   shape (3, 6)
+        If F_nom_i is provided:
+            p_in_i = R_i^T (p_i - t_i)
+            J_eta_i = [-R_i [p_in_i]x | R_i]     shape (3, 6)
+
+        If F_nom_i is None (identity approximation):
+            J_eta_i = [-[p_i]x | I_3]              shape (3, 6)
         """
         p1 = np.asarray(p1_nom, dtype=float).reshape(3)
         p2 = np.asarray(p2_nom, dtype=float).reshape(3)
-        J1 = np.hstack([-skew(p1), np.eye(3)])
-        J2 = np.hstack([-skew(p2), np.eye(3)])
+
+        if F_nom_1 is not None:
+            F1 = np.asarray(F_nom_1, dtype=float).reshape(4, 4)
+            R1, t1 = F1[:3, :3], F1[:3, 3]
+            p1_in = R1.T @ (p1 - t1)
+            J1 = np.hstack([-R1 @ skew(p1_in), R1])
+        else:
+            J1 = np.hstack([-skew(p1), np.eye(3)])
+
+        if F_nom_2 is not None:
+            F2 = np.asarray(F_nom_2, dtype=float).reshape(4, 4)
+            R2, t2 = F2[:3, :3], F2[:3, 3]
+            p2_in = R2.T @ (p2 - t2)
+            J2 = np.hstack([-R2 @ skew(p2_in), R2])
+        else:
+            J2 = np.hstack([-skew(p2), np.eye(3)])
+
         return cls(
             p1_nom=p1, p2_nom=p2,
             J_eta_1=J1, J_eta_2=J2,

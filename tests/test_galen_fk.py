@@ -24,7 +24,7 @@ from node_registry import galen_fk
 from uncertainty_networks.se3 import is_se3
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# -- helpers ------------------------------------------------------------------
 
 LABELS = ["MobilePlatform", "RollArmBase", "TiltDistal", "Tip"]
 ZERO   = [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -36,7 +36,7 @@ def _tip(joints):
     return galen_fk(joints)[-1][:3, 3]
 
 
-# ── basic structure ───────────────────────────────────────────────────────────
+# -- basic structure ----------------------------------------------------------
 
 def test_returns_four_transforms():
     transforms = galen_fk(ZERO)
@@ -54,7 +54,7 @@ def test_output_shapes():
         assert T.shape == (4, 4)
 
 
-# ── zero-joint geometry ───────────────────────────────────────────────────────
+# -- zero-joint geometry ------------------------------------------------------
 
 def test_platform_height_at_zero_joints():
     T_mp = galen_fk(ZERO)[0]
@@ -63,7 +63,7 @@ def test_platform_height_at_zero_joints():
 
 
 def test_platform_identity_rotation_at_zero_joints():
-    """Equal carriages → no platform tilt."""
+    """Equal carriages -> no platform tilt."""
     T_mp = galen_fk(ZERO)[0]
     assert np.allclose(T_mp[:3, :3], np.eye(3), atol=1e-9)
 
@@ -78,10 +78,10 @@ def test_roll_arm_pivot_offset_at_zero():
         f"Roll arm pivot offset wrong: got {delta}, expected {expected}"
 
 
-# ── carriage (parallel stage) behaviour ──────────────────────────────────────
+# -- carriage (parallel stage) behaviour --------------------------------------
 
 def test_equal_carriage_raise_lifts_all_frames():
-    """All three carriages +delta → all frame z positions rise by delta."""
+    """All three carriages +delta -> all frame z positions rise by delta."""
     delta = 0.05
     T0 = galen_fk(ZERO)
     T1 = galen_fk([delta, delta, delta, 0, 0])
@@ -110,7 +110,7 @@ def test_c2_c3_differential_tilts_platform():
     assert not np.allclose(T_mp[:3, :3], np.eye(3), atol=1e-3)
 
 
-# ── roll joint ────────────────────────────────────────────────────────────────
+# -- roll joint ---------------------------------------------------------------
 
 def test_roll_zero_gives_identity_like_rotation():
     """At zero roll the roll-arm rotation should equal the platform rotation."""
@@ -126,16 +126,16 @@ def test_roll_changes_orientation():
 
 
 def test_roll_does_not_change_z_height():
-    """Roll is pure rotation around a fixed pivot — z of roll arm base unchanged."""
+    """Roll is pure rotation around a fixed pivot -- z of roll arm base unchanged."""
     z0 = galen_fk([0, 0, 0, 0,   0])[1][2, 3]
     z1 = galen_fk([0, 0, 0, 0.5, 0])[1][2, 3]
     assert abs(z1 - z0) < 1e-6
 
 
-# ── tilt joint ────────────────────────────────────────────────────────────────
+# -- tilt joint ---------------------------------------------------------------
 
 def test_tilt_changes_distal_rotation():
-    """TiltDistal is the pivot — position is fixed, only rotation changes."""
+    """TiltDistal is the pivot -- position is fixed, only rotation changes."""
     T0 = galen_fk([0, 0, 0, 0, 0  ])[2]
     T1 = galen_fk([0, 0, 0, 0, 0.3])[2]
     # Position (pivot) must stay the same
@@ -152,10 +152,10 @@ def test_tilt_changes_tip_position():
     assert np.linalg.norm(tip1 - tip0) > 1e-3
 
 
-# ── continuity ────────────────────────────────────────────────────────────────
+# -- continuity ---------------------------------------------------------------
 
 def test_tip_continuous_in_joints():
-    """Small joint perturbation → small tip displacement."""
+    """Small joint perturbation -> small tip displacement."""
     eps = 1e-4
     base_tip = _tip(ZERO)
     for i in range(5):
@@ -164,10 +164,10 @@ def test_tip_continuous_in_joints():
         perturbed_tip = _tip(j)
         dist = np.linalg.norm(perturbed_tip - base_tip)
         assert dist < 0.01, \
-            f"Joint {i} perturbation of {eps} moved tip by {dist:.4f} m — too large"
+            f"Joint {i} perturbation of {eps} moved tip by {dist:.4f} m -- too large"
 
 
-# ── short-input padding ───────────────────────────────────────────────────────
+# -- short-input padding ------------------------------------------------------
 
 def test_accepts_fewer_than_5_joints():
     """galen_fk should pad missing joints with zero."""

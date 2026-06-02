@@ -17,7 +17,7 @@ Prior:
 independent, so x = [eta_res; eta_k] ~ N(0, C0)
 
 Residual (nonlinear):
-    r = Log( (Exp(eta_res)F_res)^{-1} (Exp(eta_k)F_k) )
+    r = Log( (F_res Exp(eta_res))^{-1} (F_k Exp(eta_k)) )
 
 Constraint (observation):
     r ≈ 0 with small noise

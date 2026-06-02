@@ -7,7 +7,7 @@ This module implements the core uncertain geometric primitives described in:
 
 Scope:
   - Forward uncertainty propagation on SE(3) using first-order approximations
-  - CIS I left-multiplicative perturbation convention
+  - CIS I right-multiplicative perturbation convention
   - No estimation / filtering / optimization
 
 Convention (CIS I):
@@ -15,14 +15,14 @@ Convention (CIS I):
   - Pose perturbation: eta = [alpha; epsilon] ∈ R^6,  eta ~ N(0, C)
       alpha   ∈ R^3 rotation perturbation
       epsilon ∈ R^3 translation perturbation
-  - Left perturbation model:
-      T_true = Exp(eta) ∘ F_nom
+  - Right perturbation model:
+      T_true = F_nom ∘ Exp(eta)
 
 Core propagation rule (independent edges):
   If F_ab = {F_nom,ab, C_ab} and F_bc = {F_nom,bc, C_bc}, then
 
       F_nom,ac = F_nom,ab ∘ F_nom,bc
-      C_ac ≈ C_ab + Ad_{F_nom,ab} C_bc Ad_{F_nom,ab}^T
+      C_ac ≈ Ad_{F_nom,bc^{-1}} C_ab Ad_{F_nom,bc^{-1}}^T + C_bc
 
 where Ad_T is the SE(3) adjoint under CIS I twist ordering [alpha; epsilon].
 """
@@ -49,8 +49,8 @@ class UncertainTransform:
         - F_nom ∈ SE(3) is the nominal 4×4 homogeneous transform
         - C ∈ R^{6×6} is the covariance of the pose perturbation eta
 
-    Perturbation model (CIS I, left-multiplicative):
-        T_true = Exp(eta) ∘ F_nom
+    Perturbation model (CIS I, right-multiplicative):
+        T_true = F_nom ∘ Exp(eta)
         eta = [alpha; epsilon] ~ N(0, C)
 
     This class supports:
@@ -93,11 +93,11 @@ class UncertainTransform:
             F_nom^{-1} = inv_se3(F_nom)
 
         Covariance mapping:
-            Under the CIS I left-perturbation model, the inverse perturbation is
-            mapped by the adjoint of the inverse nominal transform. Using a
+            Under the CIS I right-perturbation model, the inverse perturbation is
+            mapped by the adjoint of the nominal transform. Using a
             first-order approximation:
 
-                C_inv ≈ Ad_{F_nom^{-1}} C Ad_{F_nom^{-1}}^T
+                C_inv ≈ Ad_{F_nom} C Ad_{F_nom}^T
 
         Returns
         -------
@@ -105,8 +105,8 @@ class UncertainTransform:
             Inverse uncertain transform.
         """
         F_inv = inv_se3(self.F_nom)
-        Ad_Finv = adjoint_se3(F_inv)
-        C_inv = Ad_Finv @ self.C @ Ad_Finv.T
+        Ad_F = adjoint_se3(self.F_nom)
+        C_inv = Ad_F @ self.C @ Ad_F.T
         return UncertainTransform(F_inv, C_inv)
 
     def compose(self, other: "UncertainTransform", assume_independent: bool = True) -> "UncertainTransform":
@@ -121,7 +121,7 @@ class UncertainTransform:
             F_nom,ac = F_nom,ab ∘ F_nom,bc  (matrix product)
 
         First-order covariance propagation (independent edges):
-            C_ac ≈ C_ab + Ad_{F_nom,ab} C_bc Ad_{F_nom,ab}^T
+            C_ac ≈ Ad_{F_nom,bc^{-1}} C_ab Ad_{F_nom,bc^{-1}}^T + C_bc
 
         This is the core propagation rule used throughout the framework.
 
@@ -142,13 +142,13 @@ class UncertainTransform:
         F_bc = other.F_nom
         F_ac = F_ab @ F_bc
 
-        Ad_Fab = adjoint_se3(F_ab)
+        Ad_Fbc_inv = adjoint_se3(inv_se3(F_bc))
 
         # Current scope: independent edges; cross-covariances not tracked
         if assume_independent:
-            C_ac = self.C + Ad_Fab @ other.C @ Ad_Fab.T
+            C_ac = Ad_Fbc_inv @ self.C @ Ad_Fbc_inv.T + other.C
         else:
-            C_ac = self.C + Ad_Fab @ other.C @ Ad_Fab.T
+            C_ac = Ad_Fbc_inv @ self.C @ Ad_Fbc_inv.T + other.C
 
         return UncertainTransform(F_ac, C_ac)
 
@@ -159,6 +159,44 @@ class UncertainTransform:
         """
         return self.compose(other)
 
+    def to_right_perturbation(self) -> "UncertainTransform":
+        r"""
+        Return this transform — covariance is already in right-perturbation convention.
+
+        Right model:  T_true = F_nom * Exp(eta_R)
+
+        Since this class natively uses right perturbation, this is a no-op.
+
+        Returns
+        -------
+        UncertainTransform
+            Same uncertain transform (no-op).
+        """
+        return UncertainTransform(self.F_nom, self.C.copy())
+
+    def to_left_perturbation(self) -> "UncertainTransform":
+        r"""
+        Convert this right-perturbation covariance to its left-perturbation equivalent.
+
+        This library uses right-perturbation (body-frame) as the default:
+            T_true = F_nom * Exp(eta_R)        (right / body-frame convention)
+
+        The equivalent left-perturbation (world-frame) covariance satisfies:
+            T_true = Exp(eta_L) * F_nom        (left / world-frame convention)
+
+        Relationship:
+            eta_L = Ad_{F_nom} * eta_R
+            =>  C_left = Ad_{F_nom} * C_right * Ad_{F_nom}^T
+
+        Returns
+        -------
+        UncertainTransform
+            Same nominal transform, covariance expressed in left-perturbation convention.
+        """
+        Ad = adjoint_se3(self.F_nom)
+        C_left = Ad @ self.C @ Ad.T
+        return UncertainTransform(self.F_nom, C_left)
+
     def transform_point(self, p: Array, Cp: Array | None = None) -> tuple[Array, Array]:
         r"""
         Transform a 3D point and propagate uncertainty using CIS I Jacobians.
@@ -166,15 +204,17 @@ class UncertainTransform:
         Nominal point transform:
             p'_nom = R p + t
 
-        CIS I left-perturbation linearization:
-            If T_true = Exp(eta) ∘ T_nom with eta = [alpha; epsilon],
+        CIS I right-perturbation linearization:
+            If T_true = F_nom ∘ Exp(eta) with eta = [alpha; epsilon],
             then to first order:
 
-                δp' ≈ -[p'_nom]× alpha + epsilon
+                δp' ≈ -R [p]× alpha + R epsilon
 
         Therefore, the Jacobians are:
-            J_eta = [ -[p'_nom]×   I_3 ]    (shape 3×6)
-            J_p   = R                       (shape 3×3)
+            J_eta = [ -R [p]×   R ]    (shape 3×6)
+            J_p   = R              (shape 3×3)
+
+        where p is the **input** point (in the source frame).
 
         Covariance propagation:
             If point has intrinsic covariance Cp (in the input point's frame),
@@ -208,9 +248,10 @@ class UncertainTransform:
         p_nom = R @ p + t
 
         # CIS I Jacobian w.r.t. pose perturbation eta = [alpha; epsilon]
+        # Right convention: d p' / d eta = [-R skew(p_in), R]
         J_eta = np.zeros((3, 6), dtype=float)
-        J_eta[:, :3] = -skew(p_nom)       # d p' / d alpha
-        J_eta[:, 3:] = np.eye(3, dtype=float)  # d p' / d epsilon
+        J_eta[:, :3] = -R @ skew(p)         # d p' / d alpha (input point)
+        J_eta[:, 3:] = R                    # d p' / d epsilon
 
         Cp_pose = J_eta @ self.C @ J_eta.T
 

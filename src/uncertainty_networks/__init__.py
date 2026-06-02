@@ -5,7 +5,7 @@ Date: 04/04/2026
 uncertainty-networks
 ====================
 Uncertainty propagation through geometric networks on SE(3),
-following the CIS I left-multiplicative perturbation convention.
+following the CIS I right-multiplicative perturbation convention.
 
 Quick start
 -----------

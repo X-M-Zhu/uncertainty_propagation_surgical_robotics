@@ -14,16 +14,16 @@ perturbation.
 
 Model:
 
-    T_true = Exp(eta) ∘ F_nom
+    T_true = F_nom ∘ Exp(eta)
     eta ~ N(0, C)
 
 Point transform:
 
     p' = R p + t
 
-Linearization used in the code:
+Linearization used in the code (CIS I right-perturbation):
 
-    δp' ≈ -[p']× alpha + epsilon
+    δp' ≈ -R [p]× alpha + R epsilon
 """
 
 import numpy as np
@@ -83,7 +83,7 @@ def main():
 
         eta = np.random.multivariate_normal(np.zeros(6), C)
 
-        T_sample = exp_se3(eta) @ F_nom
+        T_sample = F_nom @ exp_se3(eta)
 
         R = T_sample[:3, :3]
         t = T_sample[:3, 3]

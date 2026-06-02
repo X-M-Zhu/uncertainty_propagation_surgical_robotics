@@ -10,15 +10,15 @@ Validate the point covariance propagation formula used in UncertainTransform.tra
 Nominal transform:
     p'_nom = R p + t
 
-CIS I left-perturbation model:
-    T_true = Exp(eta) ∘ T_nom,   eta = [alpha; epsilon] ~ N(0, C)
+CIS I right-perturbation model:
+    T_true = T_nom ∘ Exp(eta),   eta = [alpha; epsilon] ~ N(0, C)
 
 First-order linearization (CIS I):
-    δp' ≈ -[p'_nom]× alpha + epsilon
+    δp' ≈ -R [p]× alpha + R epsilon
 
 Thus Jacobians:
-    J_eta = [ -[p'_nom]×   I ]    (3×6)
-    J_p   = R                     (3×3)
+    J_eta = [ -R [p]×   R ]    (3×6)
+    J_p   = R                  (3×3)
 
 Covariance propagation:
     Cp' ≈ J_eta C J_eta^T + R Cp R^T
@@ -26,7 +26,7 @@ Covariance propagation:
 
 Monte Carlo
 Simulate N samples:
-    T_i = Exp(eta_i) ∘ T_nom
+    T_i = T_nom ∘ Exp(eta_i)
     p_i = (T_i) * (p + δp_i)
 
 Compute sample covariance of {p_i} and compare with analytical Cp'.
@@ -79,7 +79,7 @@ def main():
 
     for i in range(N):
         eta = rng.multivariate_normal(mean=mean0_6, cov=C)
-        T_i = exp_se3(eta) @ T_nom
+        T_i = T_nom @ exp_se3(eta)
 
         # intrinsic point noise
         if Cp is None:

@@ -69,10 +69,10 @@ def main():
         eta_ac = rng.multivariate_normal(mean0_6, C_ac)
         eta_cd = rng.multivariate_normal(mean0_6, C_cd)
 
-        T_ab_s = exp_se3(eta_ab) @ T_ab
-        T_bd_s = exp_se3(eta_bd) @ T_bd
-        T_ac_s = exp_se3(eta_ac) @ T_ac
-        T_cd_s = exp_se3(eta_cd) @ T_cd
+        T_ab_s = T_ab @ exp_se3(eta_ab)
+        T_bd_s = T_bd @ exp_se3(eta_bd)
+        T_ac_s = T_ac @ exp_se3(eta_ac)
+        T_cd_s = T_cd @ exp_se3(eta_cd)
 
         # B -> D
         T_bd_total = T_bd_s

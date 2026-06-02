@@ -34,7 +34,7 @@ This script validates two related claims:
       For each sample i:
         delta_q_j = q_static_j + q_enc_j + q_dyn_j  (per joint j)
         T_perturbed = FK(q_nominal + delta_q)
-        xi_i        = Log( T_perturbed  @  F_nom^{-1} )
+        xi_i        = Log( F_nom^{-1}  @  T_perturbed )
 
   The sample covariance of {xi_i} is compared to the analytic covariance
   from the network query.
@@ -175,7 +175,7 @@ def part2_per_edge_rotation(rng: np.random.Generator, N: int) -> None:
         T_curr_pert = transforms_pert[joint_idx]
         T_step_pert = inv_se3(T_prev_pert) @ T_curr_pert
 
-        T_res = T_step_pert @ T_step_nom_inv
+        T_res = T_step_nom_inv @ T_step_pert
         xi_samples[i] = log_se3(T_res)
 
     C_mc = cov_sample(xi_samples)

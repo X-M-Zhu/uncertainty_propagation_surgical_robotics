@@ -121,12 +121,25 @@ class TestPointObservation:
         assert J.shape == (3, 6)
 
     def test_jacobian_cis_i_formula(self):
-        """J_eta = [-[p_nom]x | I_3] for CIS I left perturbation."""
+        """Without F_nom, build() uses identity approximation: J_eta = [-[p_nom]x | I_3]."""
         from uncertainty_networks.se3 import skew
         obs = PointObservation.build(self.p_nom, "path", self.z, self.C_nu)
         J = obs.jacobians()["path"]
         J_expected = np.hstack([-skew(self.p_nom), np.eye(3)])
         np.testing.assert_allclose(J, J_expected, atol=1e-15)
+
+    def test_jacobian_with_f_nom_right_convention(self):
+        """With F_nom provided, build() uses right-convention: J_eta = [-R skew(p_in) | R]."""
+        from uncertainty_networks.se3 import skew, make_se3, rotz
+        R = rotz(np.pi / 4)
+        t = np.array([0.1, 0.2, 0.3])
+        F_nom = make_se3(R, t)
+        p_in = np.array([0.05, -0.03, 0.02])
+        p_nom = R @ p_in + t
+        obs = PointObservation.build(p_nom, "path", self.z, self.C_nu, F_nom=F_nom)
+        J = obs.jacobians()["path"]
+        J_expected = np.hstack([-R @ skew(p_in), R])
+        np.testing.assert_allclose(J, J_expected, atol=1e-12)
 
     def test_dim(self):
         obs = PointObservation.build(self.p_nom, "path", self.z, self.C_nu)
@@ -173,10 +186,10 @@ class TestDistanceObservation:
         np.testing.assert_allclose(C_nu[0, 0], self.sigma ** 2)
 
     def test_unit_vector_direction(self):
-        """Jacobian for k1 should align with unit vector p1 - p2."""
+        """Jacobian for k1 should align with unit vector p1 - p2 (identity approx, no F_nom)."""
         obs = DistanceObservation.build(self.p1, self.p2, "k1", "k2", self.z, self.sigma)
         # p1 - p2 = [1, 0, 0], unit = [1, 0, 0]
-        # J1 = u^T J_eta_1 = [1,0,0] @ [-skew(p1) | I]
+        # J1 = u^T J_eta_1 = [1,0,0] @ [-skew(p1) | I]  (identity approximation)
         from uncertainty_networks.se3 import skew
         J_eta_1 = np.hstack([-skew(self.p1), np.eye(3)])
         J1_expected = np.array([[1.0, 0.0, 0.0]]) @ J_eta_1

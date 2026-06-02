@@ -21,7 +21,7 @@ Analytic:
 
 Monte Carlo:
     - sample eta ~ N(0, C_ab)
-    - compute T_ab_sample = Exp(eta) @ T_ab_nom
+    - compute T_ab_sample = T_ab_nom @ Exp(eta)
     - transform points; build delta samples; compute sample covariance
 """
 
@@ -67,7 +67,7 @@ def main():
 
     for i in range(N):
         eta = rng.multivariate_normal(mean0, C_ab)
-        T_ab = exp_se3(eta) @ T_ab_nom
+        T_ab = T_ab_nom @ exp_se3(eta)
         R = T_ab[:3, :3]
         t = T_ab[:3, 3]
 

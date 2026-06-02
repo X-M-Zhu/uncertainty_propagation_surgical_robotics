@@ -512,46 +512,54 @@ class GeometricNetwork:
             Linear map:  η_0 contribution from this edge = A_canonical @ η_{e,canonical}
 
             Forward traversal (is_forward=True):
-                A_canonical = Ad_{T_prefix}
+                A_canonical = Ad_{T_suffix^{-1}}
+                where T_suffix = product of all edge nominals AFTER this edge.
 
             Inverse traversal (is_forward=False):
-                Under CIS I, inverting a transform gives
-                    η_inv ≈ -Ad_{F_inv} η_fwd    (first-order)
-                so:
-                    A_canonical = -Ad_{T_prefix} @ Ad_{F_inv_nom}
+                Under CIS I right-perturbation, inverting a transform gives
+                    η_inv ≈ -Ad_{F_fwd} η_fwd    (first-order)
+                where F_fwd = inv(e.transform.F_nom), so:
+                    A_canonical = -Ad_{T_suffix^{-1}} @ Ad_{F_fwd_nom}
 
         C_canonical : (6,6)
             Covariance of the canonical (forward) variable.
             For forward edges this is just C_e.
             For inverse edges it is recovered as:
-                C_canonical = Ad_{F_fwd} C_inv Ad_{F_fwd}^T
-            where F_fwd = inv(F_inv_nom).
+                C_canonical = Ad_{F_inv_nom} C_inv Ad_{F_inv_nom}^T
+            where F_inv_nom = e.transform.F_nom (the stored inverse nominal).
         """
         edges = self._edges_along_path(path)
-        T_prefix = np.eye(4, dtype=float)
+        m = len(edges)
+
+        # Backward pass: T_suffixes[k] = F_{k+1} @ ... @ F_{m-1}
+        T_suffix = np.eye(4, dtype=float)
+        T_suffixes: List[Array] = [None] * m  # type: ignore[list-item]
+        for k in range(m - 1, -1, -1):
+            T_suffixes[k] = T_suffix.copy()
+            T_suffix = edges[k].transform.F_nom @ T_suffix
+
         result: Dict[str, Tuple[Array, Array]] = {}
 
-        for e in edges:
-            Ad_prefix = adjoint_se3(T_prefix)
+        for k, e in enumerate(edges):
+            Ad_suf_inv = adjoint_se3(inv_se3(T_suffixes[k]))
 
             if e.is_forward:
-                # Canonical variable is η_fwd, contribution = Ad_prefix @ η_fwd
-                A_can = Ad_prefix.copy()
+                # Canonical variable is η_fwd, contribution = Ad_{T_suf^{-1}} @ η_fwd
+                A_can = Ad_suf_inv.copy()
                 C_can = e.transform.C.copy()
             else:
-                # η_inv ≈ -Ad_{F_inv} η_fwd  →  contribution = Ad_prefix @ η_inv
-                #                                             = -Ad_prefix @ Ad_{F_inv} @ η_fwd
-                Ad_Finv = adjoint_se3(e.transform.F_nom)
-                A_can = -Ad_prefix @ Ad_Finv
+                # η_inv ≈ -Ad_{F_fwd} η_fwd  (RIGHT convention)
+                # F_fwd = inv(e.transform.F_nom)
+                Ad_Ffwd = adjoint_se3(inv_se3(e.transform.F_nom))
+                A_can = -Ad_suf_inv @ Ad_Ffwd
 
                 # Recover C_canonical from stored C_inv:
-                #   C_inv = Ad_{F_inv} C_fwd Ad_{F_inv}^T
-                #   C_fwd = Ad_{F_fwd} C_inv Ad_{F_fwd}^T,   F_fwd = inv(F_inv_nom)
-                Ad_Ffwd = adjoint_se3(inv_se3(e.transform.F_nom))
-                C_can = _sym(Ad_Ffwd @ e.transform.C @ Ad_Ffwd.T)
+                # Under RIGHT convention: C_inv = Ad_{F_fwd} C_fwd Ad_{F_fwd}^T
+                # So: C_fwd = Ad_{F_inv_nom} C_inv Ad_{F_inv_nom}^T
+                Ad_Finv = adjoint_se3(e.transform.F_nom)
+                C_can = _sym(Ad_Finv @ e.transform.C @ Ad_Finv.T)
 
             result[e.edge_id] = (A_can, C_can)
-            T_prefix = T_prefix @ e.transform.F_nom
 
         return result
 
@@ -720,34 +728,45 @@ class GeometricNetwork:
             )
 
         edges = self._edges_along_path(path)
+        m = len(edges)
 
-        # Accumulate prefix transform and collect prefix adjoints per edge.
-        T_prefix = np.eye(4, dtype=float)
-        Ad_prefix_list: List[Array] = []
-        for e in edges:
-            Ad_prefix_list.append(adjoint_se3(T_prefix))
-            T_prefix = T_prefix @ e.transform.F_nom
+        # Backward pass: T_suffixes[k] = F_{k+1} @ ... @ F_{m-1}
+        T_suffix = np.eye(4, dtype=float)
+        T_suffixes: List[Array] = [None] * m  # type: ignore[list-item]
+        for k in range(m - 1, -1, -1):
+            T_suffixes[k] = T_suffix.copy()
+            T_suffix = edges[k].transform.F_nom @ T_suffix
 
-        T_total = T_prefix
+        # After the backward pass T_suffix holds the full product F_0 @ ... @ F_{m-1}
+        T_total = T_suffix
         R_total = T_total[:3, :3]
         t_total = T_total[:3, 3]
 
         p_nom = R_total @ point.p_local + t_total
 
-        # CIS I Jacobian of p_nom w.r.t. aggregated pose perturbation η_total.
-        J_point = np.zeros((3, 6), dtype=float)
-        J_point[:, :3] = -skew(p_nom)          # ∂p/∂α
-        J_point[:, 3:] = np.eye(3, dtype=float) # ∂p/∂ε
-
-        # Per-edge Jacobians: J_e = J_point @ Ad_{T_prefix up to e}.
+        # Per-edge Jacobians under CIS I right-perturbation.
+        # J_k = R_01k @ [-skew(p_suf_k), I]   (3×6)
+        # where R_01k  = rotation of F_0 @ ... @ F_k
+        #       p_suf_k = T_suffix_k @ p_in (point expressed after edge k)
         edge_terms: Dict[str, Tuple[Array, Array]] = {}
         Cp_edges = np.zeros((3, 3), dtype=float)
 
-        for e, Ad_pref in zip(edges, Ad_prefix_list):
-            J_e = J_point @ Ad_pref
+        R_prefix = np.eye(3, dtype=float)  # rotation before edge k
+        p_in = point.p_local
+
+        for k, e in enumerate(edges):
+            R_k = e.transform.F_nom[:3, :3]
+            R_01k = R_prefix @ R_k  # rotation up to and including edge k
+
+            T_suf = T_suffixes[k]
+            p_suf_k = T_suf[:3, :3] @ p_in + T_suf[:3, 3]
+
+            J_e = R_01k @ np.hstack([-skew(p_suf_k), np.eye(3, dtype=float)])
             C_e = e.transform.C
             Cp_edges += J_e @ C_e @ J_e.T
             edge_terms[e.edge_id] = (J_e, C_e)
+
+            R_prefix = R_01k
 
         # Intrinsic point covariance mapped by R_total.
         Cp_point = R_total @ point.Cp @ R_total.T

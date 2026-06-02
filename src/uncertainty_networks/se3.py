@@ -16,9 +16,9 @@
      where:
        alpha   ∈ R^3  is the rotational perturbation
        epsilon ∈ R^3  is the translational perturbation
-   - Left-multiplicative perturbation model:
+   - Right-multiplicative perturbation model:
 
-         T_true = Exp(xi) ∘ T_nom
+         T_true = T_nom ∘ Exp(xi)
 
  Consistency with this convention is critical for uncertainty propagation.
 """
@@ -160,19 +160,19 @@ def adjoint_se3(T: Array) -> Array:
                 [[p]× R,      R ]]
 
     Role in uncertainty propagation:
-        Under left-multiplicative perturbations,
+        Under right-multiplicative perturbations,
 
-            T_true = Exp(xi) ∘ T_nom
+            T_true = T_nom ∘ Exp(xi)
 
         when composing two uncertain transforms,
-        the perturbation of the second transform must be mapped by
-        the adjoint of the first nominal transform:
+        the perturbation of the first transform must be mapped by
+        the adjoint of the inverse of the second nominal transform:
 
-            xi_ac ≈ xi_ab + Ad_{T_ab} xi_bc
+            xi_ac ≈ Ad_{T_bc^{-1}} xi_ab + xi_bc
 
         and covariance propagates as:
 
-            C_ac ≈ C_ab + Ad_{T_ab} C_bc Ad_{T_ab}ᵀ
+            C_ac ≈ Ad_{T_bc^{-1}} C_ab Ad_{T_bc^{-1}}ᵀ + C_bc
 
     Parameters
     ----------
@@ -427,8 +427,8 @@ def exp_se3(xi: Array) -> Array:
         J(α) = I + (1-cosθ)/θ^2 [α]× + (θ - sinθ)/θ^3 [α]×^2,
         θ = ||α||.
 
-    This is the correct mapping for Monte Carlo simulation of left perturbations:
-        T_true = Exp(xi) ∘ T_nom
+    This is the correct mapping for Monte Carlo simulation of right perturbations:
+        T_true = T_nom ∘ Exp(xi)
 
     Parameters
     ----------
@@ -473,7 +473,7 @@ def log_se3(T: Array) -> Array:
 
     This is used in Monte Carlo validation to express the residual transform
     in the tangent space:
-        xi_res = Log( T_sample ∘ T_nom^{-1} )
+        xi_res = Log( T_nom^{-1} ∘ T_sample )
 
     Parameters
     ----------

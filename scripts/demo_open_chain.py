@@ -16,9 +16,9 @@ Each edge stores a nominal rigid transform (position + orientation) and a
 
 The covariance accumulates along the chain via the adjoint mapping:
 
-    C_AC  =  C_AB  +  Ad_{F_nom,AB} * C_BC * Ad_{F_nom,AB}^T
+    C_AC  =  Ad_{F_nom,BC^{-1}} * C_AB * Ad_{F_nom,BC^{-1}}^T  +  C_BC
 
-This is the first-order CIS I left-perturbation propagation rule.
+This is the first-order CIS I right-perturbation (body-frame) propagation rule.
 
 Outputs
 -------
@@ -102,17 +102,18 @@ def main():
 
     # Contributions: difference in trace when each edge is removed
     # We approximate by querying sub-chains and using additivity of trace.
-    # More precisely: trace contribution of edge i = trace(Ad_prefix * C_i * Ad_prefix^T)
+    # More precisely: trace contribution of edge i = trace(Ad_{suffix_i^{-1}} * C_i * Ad_{suffix_i^{-1}}^T)
     from uncertainty_networks.se3 import adjoint_se3
 
     def edge_contribution(net, chain, edge_idx):
         """Trace contribution of edge at edge_idx to the end of chain."""
-        # Build prefix transform up to (but not including) this edge
-        prefix = np.eye(4)
-        for a, b in chain[:edge_idx]:
+        from uncertainty_networks.se3 import inv_se3
+        # Build suffix transform from the edge AFTER this one to the end
+        suffix = np.eye(4)
+        for a, b in chain[edge_idx + 1:]:
             e = net.get_edge(a, b)
-            prefix = prefix @ e.F_nom
-        Ad = adjoint_se3(prefix)
+            suffix = suffix @ e.F_nom
+        Ad = adjoint_se3(inv_se3(suffix))
         e = net.get_edge(*chain[edge_idx])
         C_e = e.C
         C_mapped = Ad @ C_e @ Ad.T
@@ -133,8 +134,8 @@ def main():
     print()
     print("Key observations:")
     print("  - Uncertainty grows at every link (covariance only accumulates).")
-    print("  - Edges closer to the base (World) are mapped by larger adjoints")
-    print("    and tend to contribute more to the final uncertainty at Tool.")
+    print("  - The last edge contributes its covariance directly; earlier edges")
+    print("    are mapped through the suffix-adjoint-inverse and may contribute less.")
 
     # ── plot ─────────────────────────────────────────────────────────────────
     if do_plot:

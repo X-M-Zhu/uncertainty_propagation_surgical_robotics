@@ -42,10 +42,10 @@ uncertainty-gui
 
 ## Conventions
 
-All transforms use the **CIS I left-multiplicative** perturbation model:
+All transforms use the **CIS I right-multiplicative** perturbation model:
 
 ```
-T_true  =  Exp(η)  ⊗  T_nom
+T_true  =  T_nom  ⊗  Exp(η)
 
 η = [α; ε]  ∈  R^6
     α  — rotation  error  (3×1, radians)
@@ -57,7 +57,7 @@ T_true  =  Exp(η)  ⊗  T_nom
 - `F_nom` is always a **4×4 homogeneous matrix** (SE(3)).
 - `C` is always a **6×6 covariance matrix** with `[rotation | translation]` ordering.
 - Covariances accumulate via the SE(3) adjoint:
-  `C_ac = C_ab + Ad_{F_ab} C_bc Ad_{F_ab}^T`
+  `C_ac = Ad_{F_bc^{-1}} C_ab Ad_{F_bc^{-1}}^T + C_bc`
 
 ---
 
@@ -120,8 +120,8 @@ Composes two transforms with first-order covariance propagation.
 T_inv = T.inv()
 ```
 
-Inverts the transform. Covariance is mapped through the adjoint of the inverse:
-`C_inv ≈ Ad_{F^{-1}} C Ad_{F^{-1}}^T`
+Inverts the transform. Covariance is mapped through the adjoint of the forward transform:
+`C_inv ≈ Ad_{F_nom} C Ad_{F_nom}^T`
 
 **Returns:** `UncertainTransform`
 

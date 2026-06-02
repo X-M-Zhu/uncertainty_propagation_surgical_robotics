@@ -13,11 +13,11 @@ Forward propagation gives a prior on uncertain transforms along a path.
 Closed-loop constraints add an "observation equation" that couples two uncertain
 transforms, producing a posterior covariance by Gaussian conditioning.
 
-Residual model (SE(3), CIS I left-perturbation)
------------------------------------------------
+Residual model (SE(3), CIS I right-perturbation)
+------------------------------------------------
 Let F_res and F_k be uncertain transforms (nominal + perturbation):
-    T_res = Exp(eta_res) ∘ F_res
-    T_k   = Exp(eta_k)   ∘ F_k
+    T_res = F_res ∘ Exp(eta_res)
+    T_k   = F_k   ∘ Exp(eta_k)
 
 Define the loop residual transform:
     T_loop = T_res^{-1} ∘ T_k
@@ -135,22 +135,22 @@ def _assert_positive_definite(C: Array, name: str = "C") -> None:
 
 def loop_residual(F_res: Array, F_k: Array, eta_res: Array, eta_k: Array) -> Array:
     """
-    Compute residual r(eta_res, eta_k) = Log( (Exp(eta_res)F_res)^{-1} (Exp(eta_k)F_k) ).
+    Compute residual r(eta_res, eta_k) = Log( (F_res Exp(eta_res))^{-1} (F_k Exp(eta_k)) ).
 
     Parameters
     ----------
     F_res, F_k : ndarray, shape (4,4)
         Nominal transforms.
     eta_res, eta_k : ndarray, shape (6,)
-        Left perturbations in CIS I ordering [alpha; epsilon].
+        Right perturbations in CIS I ordering [alpha; epsilon].
 
     Returns
     -------
     r : ndarray, shape (6,)
         Residual tangent vector.
     """
-    T_res = exp_se3(eta_res) @ F_res
-    T_k = exp_se3(eta_k) @ F_k
+    T_res = F_res @ exp_se3(eta_res)
+    T_k = F_k @ exp_se3(eta_k)
     T_loop = inv_se3(T_res) @ T_k
     return log_se3(T_loop)
 

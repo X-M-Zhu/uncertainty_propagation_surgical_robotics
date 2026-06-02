@@ -56,8 +56,8 @@ Scope includes:
 
 - [x] Point transform with pose uncertainty
 - [x] Point transform with pose + intrinsic point covariance
-- [x] CIS I Jacobian  
-  \( J_\eta = [-[p'_{\text{nom}}]_\times\;\;I] \)
+- [x] CIS I Jacobian (right-perturbation)  
+  \( J_\eta = [-R\,[p_{\text{in}}]_\times\;\;R] \)
 - [x] Tests: rotation-only vs translation-only behavior
 - [x] Monte Carlo validation script
 

@@ -64,9 +64,9 @@ def main():
         eta3 = rng.multivariate_normal(mean0_6, C3)
 
         # Sampled transforms
-        T_ab_s = exp_se3(eta1) @ T_ab
-        T_bc_s = exp_se3(eta2) @ T_bc
-        T_cd_s = exp_se3(eta3) @ T_cd
+        T_ab_s = T_ab @ exp_se3(eta1)
+        T_bc_s = T_bc @ exp_se3(eta2)
+        T_cd_s = T_cd @ exp_se3(eta3)
 
         T_ad_s = T_ab_s @ T_bc_s @ T_cd_s
         T_cd_only = T_cd_s

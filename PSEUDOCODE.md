@@ -4,7 +4,7 @@
 # Kinematic Error Propagation — Pseudo Code & System Overview
 
 A framework for **first-order uncertainty propagation** through geometric networks (kinematic chains)
-following the **CIS I left-multiplicative perturbation** convention for SE(3) transforms.
+following the **CIS I right-multiplicative perturbation** convention for SE(3) transforms.
 
 ---
 
@@ -36,12 +36,12 @@ following the **CIS I left-multiplicative perturbation** convention for SE(3) tr
 
 ---
 
-## 1. Perturbation Model (Left-Multiplicative, CIS I)
+## 1. Perturbation Model (Right-Multiplicative, CIS I)
 
 The true transform is modeled as a small perturbation around a nominal:
 
 ```
-T_true = Exp(η) ∘ T_nom
+T_true = T_nom ∘ Exp(η)
 
 where η = [α; ε]  ∈ R^6    (CIS I ordering)
               α = rotation perturbation  (3×1)
@@ -107,18 +107,19 @@ CLASS UncertainTransform:
 │  Nominal:   F_nom,ac = F_nom,ab · F_nom,bc               │
 │                                                          │
 │  Covariance (first-order):                               │
-│    C_ac ≈ C_ab  +  Ad_{F_nom,ab} · C_bc · Ad_{F_nom,ab}ᵀ│
+│    C_ac ≈ Ad_{F_nom,bc^{-1}} · C_ab · Ad_{F_nom,bc^{-1}}ᵀ│
+│           +  C_bc                                        │
 │                                                          │
-│  WHY: perturbation of the second transform is expressed  │
-│  in the frame of the first via the adjoint mapping.      │
+│  WHY: the first transform's perturbation is expressed    │
+│  at the goal frame via the inverse adjoint of F_bc.      │
 └──────────────────────────────────────────────────────────┘
 ```
 
 ```
 FUNCTION compose(F_ab, F_bc):
     F_nom_ac = F_nom_ab · F_nom_bc
-    Ad       = adjoint_se3(F_nom_ab)
-    C_ac     = C_ab + Ad · C_bc · Adᵀ
+    Ad       = adjoint_se3(inv(F_nom_bc))
+    C_ac     = Ad · C_ab · Adᵀ + C_bc
     RETURN UncertainTransform(F_nom_ac, C_ac)
 ```
 
@@ -127,8 +128,8 @@ FUNCTION compose(F_ab, F_bc):
 ```
 FUNCTION inv(F_ab):
     F_nom_ba = inv_se3(F_nom_ab)
-    Ad_inv   = adjoint_se3(F_nom_ba)
-    C_ba     = Ad_inv · C_ab · Ad_invᵀ
+    Ad       = adjoint_se3(F_nom_ab)
+    C_ba     = Ad · C_ab · Adᵀ
     RETURN UncertainTransform(F_nom_ba, C_ba)
 ```
 
@@ -139,8 +140,8 @@ FUNCTION transform_point(p_local ∈ R^3, Cp_local ∈ R^{3×3}):
 
     p_nom = R · p_local + t            ← nominal transformed point
 
-    CIS I Jacobian w.r.t. η = [α; ε]:
-    J_η = [-[p_nom]×  |  I₃]           ← shape 3×6
+    CIS I Jacobian w.r.t. η = [α; ε]  (right-perturbation convention):
+    J_η = [-R · [p_local]×  |  R]     ← shape 3×6  (p_local is the input body-frame point)
 
     C_point =  J_η · C · J_ηᵀ          ← from pose uncertainty
              + R  · Cp_local · Rᵀ      ← from point's own uncertainty
@@ -283,18 +284,18 @@ FUNCTION query(start, goal):
 **Perturbation model per path:**
 
 Each path k composes its edges to get an accumulated uncertain transform.
-Using the left-multiplicative CIS I convention, the perturbation at the goal
+Using the right-multiplicative CIS I convention, the perturbation at the goal
 frame accumulates as:
 
 ```
-    T_k  =  Exp(eta_k)  ∘  F_nom_k
+    T_k  =  F_nom_k  ∘  Exp(eta_k)
 
     where  eta_k ~ N(0, C_k)
 
-    C_k  =  C_e1
-          + Ad_{F_e1}  *  C_e2  *  Ad_{F_e1}^T
-          + Ad_{F_e1*F_e2}  *  C_e3  *  Ad_{F_e1*F_e2}^T
+    C_k  =  Ad_{(F_e2·...·F_em)^{-1}}  *  C_e1  *  Ad_{...}^T
+          + Ad_{(F_e3·...·F_em)^{-1}}  *  C_e2  *  Ad_{...}^T
           + ...
+          + C_em
          (accumulated via compose() along the path)
 ```
 
@@ -766,14 +767,13 @@ src/uncertainty_networks/
   ─────────────────────────────────────────────────────────►
   A ─────────────── B ─────────────── C ─────────────── D
 
-  Composed covariance from A to D:
-  C_AD = C₁
-       + Ad_{F₁}         · C₂ · Ad_{F₁}ᵀ
-       + Ad_{F₁·F₂}      · C₃ · Ad_{F₁·F₂}ᵀ
+  Composed covariance from A to D (right-perturbation convention):
+  C_AD = Ad_{(F₂·F₃)^{-1}} · C₁ · Ad_{(F₂·F₃)^{-1}}ᵀ
+       + Ad_{F₃^{-1}}       · C₂ · Ad_{F₃^{-1}}ᵀ
+       + C₃
 
-  Each further transform gets mapped by increasingly
-  composed adjoint matrices → later edges have more influence
-  as expressed at the starting frame.
+  The last edge contributes its covariance directly; earlier edges
+  are mapped through the suffix-adjoint-inverse of all subsequent transforms.
 ```
 
 ---

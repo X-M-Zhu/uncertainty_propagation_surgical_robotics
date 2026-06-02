@@ -362,8 +362,8 @@ def fig2_montecarlo() -> None:
         T = np.eye(4)
         for u in chain:
             eta = RNG.multivariate_normal(np.zeros(6), u.C)
-            T   = T @ (exp_se3(eta) @ u.F_nom)
-        xi[i] = log_se3(T @ F_inv)
+            T   = T @ (u.F_nom @ exp_se3(eta))
+        xi[i] = log_se3(F_inv @ T)
 
     C_mc      = sample_cov(xi)
     frob_err  = np.linalg.norm(C_mc - C_analytic) / np.linalg.norm(C_analytic)

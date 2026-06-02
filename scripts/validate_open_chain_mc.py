@@ -15,17 +15,17 @@ Given two uncertain transforms (independent perturbations):
 Nominal composition:
     F_nom,ac = F_nom,ab ∘ F_nom,bc
 
-Analytical covariance propagation (CIS I, left perturbation):
-    C_ac ≈ C_ab + Ad_{F_nom,ab} C_bc Ad_{F_nom,ab}^T
+Analytical covariance propagation (CIS I, right perturbation):
+    C_ac ≈ Ad_{F_nom,bc^{-1}} C_ab Ad_{F_nom,bc^{-1}}^T + C_bc
 
 Monte Carlo "ground truth"
-We simulate samples using the left-multiplicative perturbation model:
-    T_ab = Exp(eta_ab) ∘ F_nom,ab
-    T_bc = Exp(eta_bc) ∘ F_nom,bc
+We simulate samples using the right-multiplicative perturbation model:
+    T_ab = F_nom,ab ∘ Exp(eta_ab)
+    T_bc = F_nom,bc ∘ Exp(eta_bc)
     T_ac = T_ab ∘ T_bc
 
 Then compute residuals in tangent space:
-    xi_i = Log( T_ac^{(i)} ∘ (F_nom,ac)^{-1} )
+    xi_i = Log( (F_nom,ac)^{-1} ∘ T_ac^{(i)} )
 
 The sample covariance of {xi_i} is compared to the analytical C_ac.
 
@@ -94,13 +94,13 @@ def main():
         eta_ab = sample_gaussian(mean0, C_ab, rng)
         eta_bc = sample_gaussian(mean0, C_bc, rng)
 
-        T_ab = exp_se3(eta_ab) @ F_ab_nom
-        T_bc = exp_se3(eta_bc) @ F_bc_nom
+        T_ab = F_ab_nom @ exp_se3(eta_ab)
+        T_bc = F_bc_nom @ exp_se3(eta_bc)
 
         T_ac = T_ab @ T_bc
 
-        # Residual in tangent space: xi = Log( T_ac ∘ F_nom^{-1} )
-        T_res = T_ac @ F_ac_nom_inv
+        # Residual in tangent space: xi = Log( F_nom^{-1} ∘ T_ac )
+        T_res = F_ac_nom_inv @ T_ac
         xi = log_se3(T_res)
 
         xi_samples[i, :] = xi

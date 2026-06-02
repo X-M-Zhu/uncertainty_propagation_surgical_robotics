@@ -23,7 +23,7 @@ For the full API reference see [API_REFERENCE.md](API_REFERENCE.md).
 
 ---
 
-This repository implements and validates a mathematical framework for **uncertainty propagation in geometric networks**, following the CIS I left-multiplicative perturbation convention.
+This repository implements and validates a mathematical framework for **uncertainty propagation in geometric networks**, following the CIS I right-multiplicative perturbation convention.
 
 Built for surgical robotics applications where multiple sensors, rigid links, and coordinate
 frames form a network, and you need to know how measurement errors travel through that network
@@ -82,10 +82,10 @@ All tests should pass.
 Every edge in the network stores an `UncertainTransform`: a rigid body transform (4x4 matrix)
 together with a 6x6 covariance matrix that describes how uncertain that transform is.
 
-The perturbation model is (CIS I left-multiplicative convention):
+The perturbation model is (CIS I right-multiplicative convention):
 
 ```
-T_true  =  Exp(eta)  *  T_nom
+T_true  =  T_nom  *  Exp(eta)
 
 where  eta = [alpha; epsilon]  in R^6
            alpha = rotation error  (3x1, radians)
@@ -129,7 +129,7 @@ The covariance accumulates along the chain. Each new edge adds uncertainty via
 the adjoint mapping:
 
 ```
-C_AC  =  C_AB  +  Ad_{F_AB} * C_BC * Ad_{F_AB}^T
+C_AC  =  Ad_{F_BC^{-1}} * C_AB * Ad_{F_BC^{-1}}^T  +  C_BC
 ```
 
 ---
@@ -166,7 +166,8 @@ Cp_world  =  J_eta * C_pose * J_eta^T   (from frame pose uncertainty)
            + R * Cp_local * R^T          (from the point's own local uncertainty)
 ```
 
-where  J_eta = [ -[p_nom]x  |  I_3 ]  is the CIS I point Jacobian.
+where  J_eta = [ -R [p_in]x  |  R ]  is the CIS I right-convention point Jacobian
+       and p_in is the point in the source (body) frame.
 
 ---
 
@@ -339,7 +340,7 @@ PSEUDOCODE.md               Full pseudocode and math reference
 
 ## Key Conventions
 
-- All perturbations follow the **CIS I left-multiplicative** convention: `T = Exp(eta) * T_nom`
+- All perturbations follow the **CIS I right-multiplicative** convention: `T = T_nom * Exp(eta)`
 - Perturbation vector ordering: `eta = [alpha (rotation); epsilon (translation)]`
 - Covariance matrices are always 6x6 in this ordering
 - Forward propagation and loop conditioning are separate steps by design
