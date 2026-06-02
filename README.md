@@ -195,15 +195,78 @@ wsl bash -lc "source /opt/ros/noetic/setup.bash && python3 /mnt/c/.../ambf_bridg
 
 ### For macOS users
 
-AMBF does not have a native macOS build. The recommended approach is to use **VMware Fusion**, a virtual machine app for macOS that runs a full Linux environment inside your Mac. AMBF and ROS then run exactly as they do on native Linux.
+AMBF does not have a native macOS build. The recommended approach is **VMware Fusion** — a virtual machine app that creates a full Linux computer running inside your Mac. Think of it as a second computer living in a window on your screen. AMBF, ROS, and the GUI all run inside that Linux window, exactly as they do on a real Linux machine.
 
-1. Download and install [VMware Fusion](https://www.vmware.com/products/fusion.html) (free for personal use).
-2. Download the [Ubuntu 20.04 LTS ISO](https://releases.ubuntu.com/20.04/).
-3. In VMware Fusion, create a new VM from the ISO. Allocate at least **4 CPU cores**, **8 GB RAM**, and **40 GB disk**.
-4. Complete the Ubuntu installation inside the VM.
-5. Inside the VM, follow the **Linux** steps above — install ROS Noetic, build AMBF, install ambf_client, and run everything from within the VM.
+**Step 1 — Download VMware Fusion**
 
-Everything (AMBF simulator, bridge, and GUI) runs inside the Ubuntu VM, so no cross-machine setup is needed.
+Go to [https://www.vmware.com/products/fusion.html](https://www.vmware.com/products/fusion.html) and download VMware Fusion. It is free for personal use. Open the downloaded `.dmg` file and drag VMware Fusion into your Applications folder to install it.
+
+**Step 2 — Download the Ubuntu 20.04 ISO**
+
+An ISO file is a disk image — it contains everything needed to install Ubuntu Linux. Download it from:
+[https://releases.ubuntu.com/20.04/](https://releases.ubuntu.com/20.04/)
+
+Click the link named **64-bit PC (AMD64) desktop image**. The file will be named something like `ubuntu-20.04.6-desktop-amd64.iso` and is about 3 GB. Wait for the download to finish before continuing.
+
+**Step 3 — Create a new virtual machine**
+
+1. Open VMware Fusion from your Applications folder.
+2. Click **File → New** (or the **+** button).
+3. Drag the downloaded `.iso` file into the window that appears, then click **Continue**.
+4. Select **Linux → Ubuntu 64-bit** if prompted for the operating system type, then click **Continue**.
+5. On the **Finish** screen, click **Customize Settings** before clicking Finish.
+   - Set **Processors & Memory** to at least **4 CPU cores** and **8 GB RAM**.
+   - Set **Hard Disk** to at least **40 GB**.
+6. Close the settings window, then click **Finish**. The VM will start.
+
+**Step 4 — Install Ubuntu inside the VM**
+
+A purple Ubuntu installer screen will appear inside the VMware window.
+
+1. Click **Install Ubuntu**.
+2. Choose your keyboard layout and click **Continue**.
+3. Select **Normal installation** and click **Continue**.
+4. Select **Erase disk and install Ubuntu** (this only erases the virtual disk, not your Mac), then click **Install Now → Continue**.
+5. Choose your time zone and click **Continue**.
+6. Enter your name, a computer name, a username, and a password. Click **Continue**.
+7. Wait 10–15 minutes for installation to complete. Click **Restart Now** when prompted.
+8. Press Enter when asked to remove the installation medium (VMware handles this automatically).
+
+Ubuntu will boot to a desktop inside the VMware window. Log in with the password you set.
+
+**Step 5 — Open a Terminal in Ubuntu**
+
+Press **Ctrl + Alt + T** on your keyboard. A terminal window will open — this is where you type commands. All the following steps use this terminal.
+
+**Step 6 — Install ROS Noetic, AMBF, and ambf_client**
+
+Follow the **Linux** steps in the section above, starting from "Install ROS Noetic". Run every command inside the Ubuntu terminal in VMware.
+
+**Step 7 — Install the GUI package inside the VM**
+
+After completing the Linux steps, install the uncertainty visualiser:
+
+```bash
+pip3 install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git"
+```
+
+**Step 8 — Run everything**
+
+Open two terminal windows inside the VM (**Ctrl + Alt + T** twice):
+
+- **Terminal 1** — start AMBF:
+  ```bash
+  source /opt/ros/noetic/setup.bash
+  cd ~/ambf/build
+  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ```
+
+- **Terminal 2** — launch the GUI:
+  ```bash
+  uncertainty-gui
+  ```
+
+Both windows will appear inside the VMware Fusion window on your Mac. Select a robot and click **Live (AMBF)** to connect to the running simulator.
 
 ---
 
