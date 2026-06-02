@@ -78,7 +78,9 @@ source ~/.bashrc
 ```bash
 cd ~
 git clone https://github.com/WPI-AIM/ambf.git --recurse-submodules
-cd ambf && mkdir build && cd build
+cd ambf
+mkdir -p build
+cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
@@ -86,7 +88,7 @@ make -j$(nproc)
 **3. Install ambf_client**
 
 ```bash
-cd ~/ambf/ambf_ros_modules/ambf_client
+cd ~/ambf/ros_modules/ambf_client
 pip3 install .
 ```
 
@@ -145,7 +147,9 @@ echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 ```bash
 cd ~
 git clone https://github.com/WPI-AIM/ambf.git --recurse-submodules
-cd ambf && mkdir build && cd build
+cd ambf
+mkdir -p build
+cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 ```
@@ -153,7 +157,7 @@ make -j$(nproc)
 **4. Install ambf_client inside WSL2**
 
 ```bash
-cd ~/ambf/ambf_ros_modules/ambf_client
+cd ~/ambf/ros_modules/ambf_client
 pip3 install .
 ```
 
