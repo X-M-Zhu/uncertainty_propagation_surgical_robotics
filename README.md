@@ -4,8 +4,19 @@
 
 ---
 
-## Student Quick Start
+This repository implements and validates a mathematical framework for **uncertainty propagation in geometric networks**, following the CIS I right-multiplicative perturbation convention.
 
+Built for surgical robotics applications where multiple sensors, rigid links, and coordinate
+frames form a network, and you need to know how measurement errors travel through that network
+to affect a final quantity (e.g. tool-tip position, distance between two anatomical landmarks).
+
+The math is documented in `docs/` and `PSEUDOCODE.md`.
+
+---
+
+### Installation
+
+## For CIS I students (using the tool)
 > **Requires Python 3.10 or later.** No need to download or clone anything.
 
 **1. Install**
@@ -21,15 +32,178 @@ uncertainty-gui
 That's it. The visualiser will open.  
 For the full API reference see [API_REFERENCE.md](API_REFERENCE.md).
 
+## For developers (editing the code)
+
+```bash
+git clone https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git
+cd uncertainty_propagation_surgical_robotics
+pip install -e ".[gui]"
+```
+
+Verify the install:
+
+```bash
+pytest
+```
+
+All tests should pass.
+
+### For AMBF live simulation
+
+The GUI has two modes:
+
+- **Mock mode** (default) — joint angles driven by sine waves. No AMBF or ROS needed. Works on any platform.
+- **Live mode** — joint angles streamed from a running AMBF simulator via `simulation/ambf_bridge.py`. Requires AMBF + ROS in a Linux environment.
+
+#### For Linux users:
+
+**1. Install ROS Noetic**
+
+```bash
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu focal main" \
+    > /etc/apt/sources.list.d/ros-latest.list'
+sudo apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' \
+    --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+sudo apt update
+sudo apt install -y ros-noetic-desktop-full python3-rosdep python3-catkin-tools
+sudo rosdep init && rosdep update
+echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
+source ~/.bashrc
+```
+
+**2. Clone and build AMBF**
+
+```bash
+cd ~
+git clone https://github.com/WPI-AIM/ambf.git --recurse-submodules
+cd ambf && mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+```
+
+**3. Install ambf_client**
+
+```bash
+cd ~/ambf/ambf_ros_modules/ambf_client
+pip3 install .
+```
+
+**4. Run AMBF**
+
+```bash
+cd ~/ambf/build
+./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+```
+
+**5. Launch the GUI in Live mode**
+
+With AMBF running, you can start the bridge manually in a second terminal:
+
+```bash
+source /opt/ros/noetic/setup.bash
+python3 simulation/ambf_bridge.py PSM ECM
+```
+
+Or simply launch the GUI, select **Live (AMBF)** mode — it starts the bridge automatically.
+
 ---
 
-This repository implements and validates a mathematical framework for **uncertainty propagation in geometric networks**, following the CIS I right-multiplicative perturbation convention.
+#### For Windows users: (via WSL2)
 
-Built for surgical robotics applications where multiple sensors, rigid links, and coordinate
-frames form a network, and you need to know how measurement errors travel through that network
-to affect a final quantity (e.g. tool-tip position, distance between two anatomical landmarks).
+`simulate.py` spawns the bridge inside WSL2 from Windows via `wsl bash -lc "..."`.
+AMBF itself runs in WSL2; the GUI runs natively on Windows.
 
-The math is documented in `docs/` and `PSEUDOCODE.md`.
+**1. Install WSL2 with Ubuntu 20.04**
+
+Open PowerShell as Administrator:
+
+```powershell
+wsl --install -d Ubuntu-20.04
+```
+
+Restart when prompted. Open **Ubuntu 20.04** from the Start menu and set a username and password.
+
+**2. Install ROS Noetic inside WSL2**
+
+In the Ubuntu WSL terminal:
+
+```bash
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu focal main" \
+    > /etc/apt/sources.list.d/ros-latest.list'
+sudo apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' \
+    --recv-key C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654
+sudo apt update
+sudo apt install -y ros-noetic-desktop-full python3-rosdep python3-catkin-tools
+sudo rosdep init && rosdep update
+echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
+```
+
+**3. Clone and build AMBF inside WSL2**
+
+```bash
+cd ~
+git clone https://github.com/WPI-AIM/ambf.git --recurse-submodules
+cd ambf && mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+```
+
+**4. Install ambf_client inside WSL2**
+
+```bash
+cd ~/ambf/ambf_ros_modules/ambf_client
+pip3 install .
+```
+
+**5. Run AMBF inside WSL2**
+
+- **Windows 11** — WSLg provides a display automatically:
+  ```bash
+  source /opt/ros/noetic/setup.bash
+  cd ~/ambf/build
+  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ```
+
+- **Windows 10** — install [VcXsrv](https://sourceforge.net/projects/vcxsrv/), launch it (check *Disable access control*), then in WSL:
+  ```bash
+  export DISPLAY=$(grep nameserver /etc/resolv.conf | awk '{print $2}'):0
+  source /opt/ros/noetic/setup.bash
+  cd ~/ambf/build
+  ./ambf_simulator --launch_file ../ambf/launch.yaml -l 0,1,2
+  ```
+
+**6. Launch the GUI on Windows**
+
+```bash
+pip install "uncertainty-networks[gui]"
+uncertainty-gui
+```
+
+In the GUI's **Live (AMBF)** settings, set the **ROS source command** to:
+
+```
+source /opt/ros/noetic/setup.bash
+```
+
+Select robots and click **Live (AMBF)**. The GUI will automatically call:
+
+```
+wsl bash -lc "source /opt/ros/noetic/setup.bash && python3 /mnt/c/.../ambf_bridge.py PSM ECM"
+```
+
+---
+
+#### For macOS users:
+
+AMBF does not have a native macOS build. The recommended approach is to use **VMware Fusion**, a virtual machine app for macOS that runs a full Linux environment inside your Mac. AMBF and ROS then run exactly as they do on native Linux.
+
+1. Download and install [VMware Fusion](https://www.vmware.com/products/fusion.html) (free for personal use).
+2. Download the [Ubuntu 20.04 LTS ISO](https://releases.ubuntu.com/20.04/).
+3. In VMware Fusion, create a new VM from the ISO. Allocate at least **4 CPU cores**, **8 GB RAM**, and **40 GB disk**.
+4. Complete the Ubuntu installation inside the VM.
+5. Inside the VM, follow the **Linux** steps above — install ROS Noetic, build AMBF, install ambf_client, and run everything from within the VM.
+
+Everything (AMBF simulator, bridge, and GUI) runs inside the Ubuntu VM, so no cross-machine setup is needed.
 
 ---
 
@@ -45,33 +219,6 @@ The math is documented in `docs/` and `PSEUDOCODE.md`.
 | Apply a loop closure constraint to reduce uncertainty | `query_closed_loop_posterior()` |
 | Automatically find and apply all loop constraints | `query_auto_loop_posterior()` |
 | Condition on heterogeneous observations (loop, point, distance) | `condition_on_observations()` |
-
----
-
-## Installation
-
-### For students (using the tool)
-
-```bash
-pip install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git"
-uncertainty-gui
-```
-
-### For developers (editing the code)
-
-```bash
-git clone https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git
-cd uncertainty_propagation_surgical_robotics
-pip install -e ".[gui]"
-```
-
-Verify the install:
-
-```bash
-pytest
-```
-
-All tests should pass.
 
 ---
 
