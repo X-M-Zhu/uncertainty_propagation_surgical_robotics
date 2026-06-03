@@ -10,10 +10,70 @@ DH sources:
   Raven2           — placeholder, needs accurate DH from mentor
 """
 
+import os
+from math import comb
+from itertools import product as _iprod
+
 import numpy as np
 
 PI   = np.pi
 PI_2 = np.pi / 2
+
+
+# ── Bernstein-polynomial calibration helpers ──────────────────────────────────
+# Geometric constants from experiment/calibration/calibration.py (metres)
+_D2R = np.array([0.0,       0.0,  76.14070118e-3])  # delta-to-roll
+_R2T = np.array([608.5e-3,  0.0,  13e-3])           # roll-to-tilt
+_T2F = np.array([31.248e-3, 0.0,  25e-3])           # tilt-to-finger
+
+
+def _bern(x, i, d):
+    return comb(d, i) * (x ** i) * ((1.0 - x) ** (d - i))
+
+
+def _load_bpoly(path):
+    with open(path) as f:
+        lines = [[float(v) for v in ln.strip().split(',')]
+                 for ln in f if ln.strip()]
+    p, q, d = int(lines[0][0]), int(lines[0][1]), int(lines[0][2])
+    return {'p': p, 'q': q, 'd': d,
+            'min': np.array(lines[1]),
+            'max': np.array(lines[2]),
+            'C':   np.array(lines[3:])}
+
+
+def _bpoly_eval(inputs, bp):
+    p, d = bp['p'], bp['d']
+    x = np.clip((inputs - bp['min']) / (bp['max'] - bp['min'] + 1e-30), 0.0, 1.0)
+    bm = np.array([
+        np.prod([_bern(x[j], idx[j], d) for j in range(p)])
+        for idx in _iprod(range(d + 1), repeat=p)
+    ])
+    return bm @ bp['C']
+
+
+def _v6_htm(v):
+    from scipy.spatial.transform import Rotation
+    T = np.eye(4)
+    T[:3, 3] = v[:3]
+    T[:3, :3] = Rotation.from_euler('XYZ', v[3:]).as_matrix()
+    return T
+
+
+_BPOLY_CACHE = {}
+
+
+def _get_bpoly():
+    if not _BPOLY_CACHE:
+        _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        _coef = os.path.join(_root, "experiment", "calibration", "coef")
+        try:
+            _BPOLY_CACHE['t'] = _load_bpoly(os.path.join(_coef, "bpoly_t.csv"))
+            _BPOLY_CACHE['r'] = _load_bpoly(os.path.join(_coef, "bpoly_r.csv"))
+        except (FileNotFoundError, OSError):
+            _BPOLY_CACHE['t'] = None
+            _BPOLY_CACHE['r'] = None
+    return _BPOLY_CACHE.get('t'), _BPOLY_CACHE.get('r')
 
 
 # ── DH transform (supports Standard and Modified conventions) ─────────────────
@@ -117,10 +177,10 @@ def raven2_fk(joints):
 
 def galen_fk(joints):
     """
-    Galen EE approximate FK — 5 DOF: c1,c2,c3 (m), roll (rad), tilt (rad).
-    Derived from 20260414_galenEE.yaml body poses. Parallel mechanism is
-    linearised (small-angle); serial roll+tilt are exact rotations.
-    Refine R_c and h0 with real calibration data.
+    Galen EE FK — 5 DOF: c1,c2,c3 (m), roll (rad), tilt (rad).
+    Nominal kinematics from 20260414_galenEE.yaml (parallel stage linearised).
+    Bernstein-polynomial T2R3 calibration applied at the tip when
+    experiment/calibration/coef/bpoly_t.csv and bpoly_r.csv are present.
     """
     j = list(joints) + [0.0] * (5 - len(joints))
     c1, c2, c3, roll, tilt = j[0], j[1], j[2], j[3], j[4]
@@ -166,6 +226,16 @@ def galen_fk(joints):
     T_tip = np.eye(4)
     T_tip[:3, :3] = T_tilt[:3, :3]
     T_tip[:3,  3] = T_tilt[:3, :3] @ np.array([0.0, 0.0, 0.032]) + T_tilt[:3, 3]
+
+    # --- Bernstein calibration corrections (T2R3 model, optical tracker data) ---
+    bp_t, bp_r = _get_bpoly()
+    if bp_t is not None and bp_r is not None:
+        from scipy.spatial.transform import Rotation as _Rot
+        _rX = _Rot.from_euler('XYZ', [roll, 0.0, 0.0])
+        _rY = _Rot.from_euler('XYZ', [0.0, tilt, 0.0])
+        delta_pos = T_tip[:3, 3] - (_D2R + _rX.apply(_R2T + _rY.apply(_T2F)))
+        T_tip = T_tip @ _v6_htm(_bpoly_eval(delta_pos,           bp_t))
+        T_tip = T_tip @ _v6_htm(_bpoly_eval(np.array([roll, tilt]), bp_r))
 
     return [T_mp, T_rab, T_tilt, T_tip]
 
