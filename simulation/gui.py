@@ -47,11 +47,61 @@ BTN_FG    = "#ffffff"
 GREEN     = "#44ff88"
 AMBER     = "#ffaa44"
 
-# ── AMBF defaults ─────────────────────────────────────────────────────────────
-DEFAULT_AMBF_LAUNCH  = ("ambf_simulator "
-                        "--launch_file ~/ambf_src/core/ambf_models/descriptions/launch.yaml "
+# ── AMBF defaults (Windows / fallback) ───────────────────────────────────────
+# On Windows we cannot inspect WSL paths from Python, so these are used as-is.
+# On Linux/macOS _detect_ambf_setup() overrides these at startup.
+_WAIT_ROS = "until rostopic list > /dev/null 2>&1; do sleep 1; done"
+DEFAULT_AMBF_LAUNCH  = ("(roscore &) && " + _WAIT_ROS + " && "
+                        "cd ~/ambf/build && ./ambf_simulator/ambf_simulator "
+                        "--launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml "
                         "-l 4,5,6")
-DEFAULT_ROS_SOURCE   = "source /opt/ros/noetic/setup.bash && source ~/ambf_ws/devel/setup.bash"
+DEFAULT_ROS_SOURCE   = "source /opt/ros/noetic/setup.bash"
+
+
+def _detect_ambf_setup():
+    """Auto-detect AMBF paths on Linux/macOS. Returns (ros_source_cmd, ambf_launch_cmd)."""
+    launch_candidates = [
+        "~/ambf/core/ambf_models/descriptions/launch.yaml",
+        "~/ambf_src/core/ambf_models/descriptions/launch.yaml",
+    ]
+    launch_file = next(
+        (p for p in launch_candidates if os.path.exists(os.path.expanduser(p))),
+        "~/ambf/core/ambf_models/descriptions/launch.yaml",
+    )
+
+    exe_candidates = [
+        "~/ambf/build/ambf_simulator/ambf_simulator",
+        "~/ambf_build/ambf_simulator/ambf_simulator",
+    ]
+    exe = next(
+        (p for p in exe_candidates if os.path.exists(os.path.expanduser(p))),
+        None,
+    )
+
+    ws_candidates = [
+        "~/ambf_ws/devel/setup.bash",
+        "~/catkin_ws/devel/setup.bash",
+    ]
+    ws_setup = next(
+        (p for p in ws_candidates if os.path.exists(os.path.expanduser(p))),
+        None,
+    )
+
+    ros_source = "source /opt/ros/noetic/setup.bash"
+    if ws_setup:
+        ros_source += f" && source {ws_setup}"
+
+    if exe:
+        exe_dir  = os.path.dirname(exe)
+        exe_name = os.path.basename(exe)
+        ambf_launch = (f"(roscore &) && {_WAIT_ROS} && "
+                       f"cd {exe_dir} && ./{exe_name} "
+                       f"--launch_file {launch_file} -l 4,5,6")
+    else:
+        ambf_launch = (f"(roscore &) && {_WAIT_ROS} && "
+                       f"ambf_simulator --launch_file {launch_file} -l 4,5,6")
+
+    return ros_source, ambf_launch
 
 
 # ── GUI ───────────────────────────────────────────────────────────────────────
@@ -74,8 +124,10 @@ class UncertaintyGUI:
         # AMBF state
         self._ambf_proc      = None          # subprocess for AMBF in WSL
         self._sim_mode       = tk.StringVar(value="mock")   # "mock" | "live"
-        self._ambf_launch    = tk.StringVar(value=DEFAULT_AMBF_LAUNCH)
-        self._ros_source     = tk.StringVar(value=DEFAULT_ROS_SOURCE)
+        _ros, _launch = (DEFAULT_ROS_SOURCE, DEFAULT_AMBF_LAUNCH) if _IS_WINDOWS \
+                        else _detect_ambf_setup()
+        self._ambf_launch    = tk.StringVar(value=_launch)
+        self._ros_source     = tk.StringVar(value=_ros)
         self._ambf_status    = tk.StringVar(value="Not launched")
 
         self._build_header()
