@@ -187,43 +187,66 @@ sed -i "s/scripts=\[''\]/scripts=[]/" setup.py
 pip3 install .
 ```
 
-**6. Run AMBF inside WSL2**
+**6. Install the GUI on Windows**
 
-- **Windows 11** — WSLg provides a display automatically:
+Open **PowerShell** (not WSL) and run:
+
+```powershell
+pip install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git"
+```
+
+If `uncertainty-gui` is not found after install, add Python's user scripts folder to your PATH:
+
+```powershell
+$env:PATH += ";$env:APPDATA\Python\Python3xx\Scripts"
+```
+
+**7. Run everything (every time you use it)**
+
+Open **two** Ubuntu WSL terminals:
+
+- **WSL Terminal 1** — start ROS master:
+  ```bash
+  source /opt/ros/noetic/setup.bash
+  roscore
+  ```
+
+- **WSL Terminal 2** — this is only needed if you want to verify AMBF manually. The GUI's **▶ Launch AMBF** button handles this automatically. If you prefer to launch manually:
+
+  *Windows 11 (WSLg built-in display):*
   ```bash
   source /opt/ros/noetic/setup.bash
   cd ~/ambf/build
-  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 0,1,2
+  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 4,5,6
   ```
 
-- **Windows 10** — install [VcXsrv](https://sourceforge.net/projects/vcxsrv/), launch it (check *Disable access control*), then in WSL:
+  *Windows 10 — install [VcXsrv](https://sourceforge.net/projects/vcxsrv/) first, launch it (check *Disable access control*), then:*
   ```bash
   export DISPLAY=$(grep nameserver /etc/resolv.conf | awk '{print $2}'):0
   source /opt/ros/noetic/setup.bash
   cd ~/ambf/build
-  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 0,1,2
+  ./ambf_simulator/ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 4,5,6
   ```
 
-**7. Launch the GUI on Windows**
-
-```bash
-pip install "uncertainty-networks[gui] @ git+https://github.com/X-M-Zhu/uncertainty_propagation_surgical_robotics.git"
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+Open **PowerShell** and launch the GUI:
+```powershell
 uncertainty-gui
 ```
 
-In the GUI's **Live (AMBF)** settings, set the **ROS source command** to:
+In the GUI's **AMBF** panel:
+- Set **ROS source cmd** to:
+  ```
+  source /opt/ros/noetic/setup.bash
+  ```
+- Set **AMBF launch cmd** to:
+  ```
+  ambf_simulator --launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml -l 4,5,6
+  ```
+- Click **▶ Launch AMBF** — the AMBF 3D window opens automatically via WSLg.
 
-```
-source /opt/ros/noetic/setup.bash
-```
+> **Note:** `roscore` must already be running in a WSL terminal before clicking **▶ Launch AMBF**.
 
-Select robots and click **Live (AMBF)**. The GUI will automatically call:
-
-```
-wsl bash -lc "source /opt/ros/noetic/setup.bash && python3 /mnt/c/.../ambf_bridge.py PSM ECM"
-```
+Select your robots, choose **Live (AMBF joint states)**, and click **▶ Run Simulation & Visualize**.
 
 ---
 
