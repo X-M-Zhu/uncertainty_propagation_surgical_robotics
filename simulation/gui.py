@@ -52,17 +52,17 @@ AMBER     = "#ffaa44"
 # On Linux/macOS _detect_ambf_setup() overrides these at startup.
 _WAIT_ROS = "until rostopic list > /dev/null 2>&1; do sleep 1; done"
 DEFAULT_AMBF_LAUNCH  = ("(roscore &) && " + _WAIT_ROS + " && "
-                        "cd ~/ambf/build && ./ambf_simulator/ambf_simulator "
-                        "--launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml "
+                        "cd ~/ambf_build && ./ambf_simulator/ambf_simulator "
+                        "--launch_file ~/ambf_src/core/ambf_models/descriptions/launch.yaml "
                         "-l 4,5,6,23")
-DEFAULT_ROS_SOURCE   = "source /opt/ros/noetic/setup.bash"
+DEFAULT_ROS_SOURCE   = "source /opt/ros/noetic/setup.bash && source ~/ambf_ws/devel/setup.bash"
 
 
 def _detect_ambf_setup():
     """Auto-detect AMBF paths on Linux/macOS. Returns (ros_source_cmd, ambf_launch_cmd)."""
     launch_candidates = [
-        "~/ambf/core/ambf_models/descriptions/launch.yaml",
         "~/ambf_src/core/ambf_models/descriptions/launch.yaml",
+        "~/ambf/core/ambf_models/descriptions/launch.yaml",
     ]
     launch_file = next(
         (p for p in launch_candidates if os.path.exists(os.path.expanduser(p))),
@@ -99,7 +99,7 @@ def _detect_ambf_setup():
                        f"--launch_file {launch_file} -l 4,5,6,23")
     else:
         ambf_launch = (f"(roscore &) && {_WAIT_ROS} && "
-                       f"ambf_simulator --launch_file {launch_file} -l 4,5,6")
+                       f"ambf_simulator --launch_file {launch_file} -l 4,5,6,23")
 
     return ros_source, ambf_launch
 
