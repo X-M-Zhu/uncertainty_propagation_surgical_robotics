@@ -4,7 +4,7 @@ Reads selections from a JSON file passed as argv[1].
 
 Supports two modes (set via "mode" key in selections JSON):
   "mock" (default) — joint angles driven by sine waves, no AMBF needed.
-  "live"           — joint angles streamed from ambf_bridge.py running in WSL.
+  "live"           — joint angles streamed from ambf_bridge.py (WSL on Windows, bash on Linux/macOS).
 """
 
 import sys
@@ -15,6 +15,7 @@ import threading
 import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+_IS_WINDOWS = sys.platform == "win32"
 sys.path.insert(0, _HERE)
 sys.path.insert(0, os.path.join(os.path.dirname(_HERE), 'src'))
 
@@ -68,20 +69,22 @@ class AmbfBridge:
         self._lock   = threading.Lock()
         self._alive  = True
 
-        # Build the WSL command that sources ROS and runs the bridge.
-        # bridge_cmd comes from the GUI (user-configurable).
+        # Build the shell command that sources ROS and runs the bridge.
+        # On Windows: run inside WSL and convert the Windows path to a WSL mount path.
+        # On Linux/macOS: run bash directly with the native path.
         bridge_path = os.path.join(_HERE, "ambf_bridge.py").replace("\\", "/")
-        # Convert Windows path to WSL mount path
-        # e.g. C:\Users\... → /mnt/c/Users/...
-        if bridge_path[1] == ":":
+        if _IS_WINDOWS and len(bridge_path) >= 2 and bridge_path[1] == ":":
             drive = bridge_path[0].lower()
-            bridge_path = f"/mnt/{drive}" + bridge_path[2:].replace("\\", "/")
+            bridge_path = f"/mnt/{drive}" + bridge_path[2:]
 
         names_arg = " ".join(robot_names)
         inner_cmd = f"{bridge_cmd} && python3 {bridge_path} {names_arg}"
 
+        shell_args = (["wsl", "bash", "-lc", inner_cmd] if _IS_WINDOWS
+                      else ["bash", "-lc", inner_cmd])
+
         self._proc = subprocess.Popen(
-            ["wsl", "bash", "-lc", inner_cmd],
+            shell_args,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

@@ -8,13 +8,13 @@ the kinematic chain with uncertainty ellipsoids updating in real time.
 AMBF Integration
 ----------------
 The "AMBF" panel at the bottom lets you:
-  1. Launch the AMBF simulator in WSL (opens its own 3D window via WSLg).
+  1. Launch the AMBF simulator (via WSL on Windows; bash directly on Linux/macOS).
   2. Switch the uncertainty viz to "Live" mode, reading real joint states
      from AMBF instead of mock sine waves.
 
 The "ROS source command" field must source your ROS workspace so that
 ambf_client is importable.  Example:
-    source /opt/ros/noetic/setup.bash && source ~/ambf_ws/devel/setup.bash
+    source /opt/ros/noetic/setup.bash
 """
 
 import sys
@@ -25,6 +25,8 @@ import subprocess
 import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
+
+_IS_WINDOWS = sys.platform == "win32"
 
 # ── path setup ────────────────────────────────────────────────────────────────
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -59,7 +61,8 @@ class UncertaintyGUI:
         self.root = root
         self.root.title("Surgical Robotics Uncertainty Visualizer")
         self.root.configure(bg=BG)
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
+        self.root.minsize(800, 520)
 
         self._node_vars    = {}   # name -> BooleanVar (checkbox)
         self._sigma_joint  = {}   # name -> DoubleVar  (slider) — dynamic motion error
@@ -152,11 +155,15 @@ class UncertaintyGUI:
         self._config_canvas.configure(yscrollcommand=sb.set)
 
         self._config_frame = tk.Frame(self._config_canvas, bg=BG)
-        self._config_canvas.create_window((0, 0), window=self._config_frame,
-                                          anchor="nw")
+        self._config_frame_id = self._config_canvas.create_window(
+            (0, 0), window=self._config_frame, anchor="nw")
         self._config_frame.bind("<Configure>",
             lambda e: self._config_canvas.configure(
                 scrollregion=self._config_canvas.bbox("all")))
+        # Keep the inner frame as wide as the canvas when the window is resized
+        self._config_canvas.bind("<Configure>",
+            lambda e: self._config_canvas.itemconfig(
+                self._config_frame_id, width=e.width))
 
         self._refresh_config()
 
@@ -338,7 +345,7 @@ class UncertaintyGUI:
         row3 = tk.Frame(panel, bg=PANEL_BG)
         row3.pack(fill="x", pady=(6, 2))
 
-        tk.Button(row3, text="▶  Launch AMBF in WSL",
+        tk.Button(row3, text="▶  Launch AMBF",
                   command=self._launch_ambf,
                   bg="#1a5c3a", fg="white",
                   font=("Helvetica", 10, "bold"),
@@ -365,9 +372,10 @@ class UncertaintyGUI:
                        selectcolor=ACCENT, activebackground=PANEL_BG,
                        font=("Helvetica", 9, "bold")).pack(side="left", padx=4)
 
+        platform_hint = ("in WSL" if _IS_WINDOWS else "in your terminal")
         tk.Label(panel,
-                 text="Live mode streams real joint angles from AMBF via ambf_bridge.py "
-                      "running in WSL. AMBF must be launched and ROS must be sourced first.",
+                 text=f"Live mode streams real joint angles from AMBF via ambf_bridge.py "
+                      f"running {platform_hint}. AMBF must be launched and ROS must be sourced first.",
                  bg=PANEL_BG, fg="#888888",
                  font=("Helvetica", 8, "italic"),
                  wraplength=700, justify="left").pack(anchor="w", pady=(4, 0))
@@ -386,9 +394,17 @@ class UncertaintyGUI:
 
         full_cmd = f"{ros_source} && {launch_cmd}" if ros_source else launch_cmd
 
+        if _IS_WINDOWS:
+            shell_args = ["wsl", "bash", "-lc", full_cmd]
+            not_found_msg = ("Could not find 'wsl'. Make sure WSL2 is installed "
+                             "and accessible from your PATH.")
+        else:
+            shell_args = ["bash", "-lc", full_cmd]
+            not_found_msg = ("Could not find 'bash'. Make sure bash is in your PATH.")
+
         try:
             self._ambf_proc = subprocess.Popen(
-                ["wsl", "bash", "-lc", full_cmd],
+                shell_args,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -397,10 +413,7 @@ class UncertaintyGUI:
             # Poll after 3 s to see if it's still alive
             self.root.after(3000, self._check_ambf_alive)
         except FileNotFoundError:
-            messagebox.showerror(
-                "WSL not found",
-                "Could not find 'wsl'. Make sure WSL is installed and "
-                "accessible from your PATH.")
+            messagebox.showerror("Launch error", not_found_msg)
         except Exception as e:
             messagebox.showerror("AMBF launch error", str(e))
 
@@ -409,7 +422,7 @@ class UncertaintyGUI:
             self._ambf_status.set("Running ✓")
             self._ambf_status_lbl.config(fg=GREEN)
         else:
-            self._ambf_status.set("Exited (check WSL / launch cmd)")
+            self._ambf_status.set("Exited (check terminal / launch cmd)")
             self._ambf_status_lbl.config(fg=HIGHLIGHT)
 
     def _stop_ambf(self):
