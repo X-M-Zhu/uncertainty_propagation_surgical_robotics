@@ -70,14 +70,14 @@ namespace: /ambf/env/
 # Both should be enabled for feedback and passive should be set to false and TYPE should be set to VELOCITY
 # Mobile_Platform mesh should be Mobile Platform_new.OBJ for accurate collision and visualization.
 
-plugins: [
-    {
-      name: ambf_model_plugin,
-      path: /home/hishida3/ambf_crtk_plugin/build/, #Change this path here
-      filename: libambf_crtk_model_plugin.so,
-      crtk_config: ADF/Galen/galen_crtk_config.yaml
-    }
-]
+# plugins: [
+#   {
+#     name: ambf_model_plugin,
+#     path: /path/to/ambf_crtk_plugin/build/,   # update if using ambf_crtk_plugin for live control
+#     filename: libambf_crtk_model_plugin.so,
+#     crtk_config: ADF/Galen/galen_crtk_config.yaml
+#   }
+# ]
 BODY Base:
   name: Base
   mesh: Base.OBJ

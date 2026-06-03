@@ -54,7 +54,7 @@ _WAIT_ROS = "until rostopic list > /dev/null 2>&1; do sleep 1; done"
 DEFAULT_AMBF_LAUNCH  = ("(roscore &) && " + _WAIT_ROS + " && "
                         "cd ~/ambf/build && ./ambf_simulator/ambf_simulator "
                         "--launch_file ~/ambf/core/ambf_models/descriptions/launch.yaml "
-                        "-l 4,5,6")
+                        "-l 4,5,6,23")
 DEFAULT_ROS_SOURCE   = "source /opt/ros/noetic/setup.bash"
 
 
@@ -96,7 +96,7 @@ def _detect_ambf_setup():
         exe_name = os.path.basename(exe)
         ambf_launch = (f"(roscore &) && {_WAIT_ROS} && "
                        f"cd {exe_dir} && ./{exe_name} "
-                       f"--launch_file {launch_file} -l 4,5,6")
+                       f"--launch_file {launch_file} -l 4,5,6,23")
     else:
         ambf_launch = (f"(roscore &) && {_WAIT_ROS} && "
                        f"ambf_simulator --launch_file {launch_file} -l 4,5,6")
