@@ -33,6 +33,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .se3 import adjoint_se3, inv_se3, is_se3, skew
+from .spatial_math import Point, Rot, Frame
 
 Array = np.ndarray
 
@@ -84,6 +85,45 @@ class UncertainTransform:
         if C is None:
             C = np.zeros((6, 6), dtype=float)
         return UncertainTransform(np.eye(4, dtype=float), C)
+
+    @classmethod
+    def from_frame(cls, frame: Frame, C: np.ndarray | None = None) -> "UncertainTransform":
+        r"""
+        Construct an UncertainTransform from a spatial_math.Frame object.
+
+        Parameters
+        ----------
+        frame : Frame
+            Nominal rigid-body frame (rotation + translation).
+        C : ndarray, optional, shape (6,6)
+            Covariance of the pose perturbation. Defaults to zero.
+
+        Returns
+        -------
+        UncertainTransform
+        """
+        F = np.eye(4, dtype=float)
+        F[:3, :3] = frame.R.matrix
+        F[:3, 3] = np.array([frame.p.x, frame.p.y, frame.p.z])
+        if C is None:
+            C = np.zeros((6, 6), dtype=float)
+        return cls(F, C)
+
+    def to_frame(self) -> Frame:
+        r"""
+        Convert the nominal transform to a spatial_math.Frame object.
+
+        Returns
+        -------
+        Frame
+            Frame with the same rotation and translation as F_nom.
+        """
+        return Frame(
+            R=Rot(matrix=self.F_nom[:3, :3]),
+            p=Point(float(self.F_nom[0, 3]),
+                    float(self.F_nom[1, 3]),
+                    float(self.F_nom[2, 3])),
+        )
 
     def inv(self) -> "UncertainTransform":
         r"""
@@ -239,18 +279,22 @@ class UncertainTransform:
         Cp_out : ndarray, shape (3,3)
             Propagated covariance of transformed point.
         """
-        p = np.asarray(p, dtype=float).reshape(3)
+        return_point = isinstance(p, Point)
+        if return_point:
+            p_arr = np.array([p.x, p.y, p.z], dtype=float)
+        else:
+            p_arr = np.asarray(p, dtype=float).reshape(3)
 
         R = self.F_nom[:3, :3]
         t = self.F_nom[:3, 3]
 
         # Nominal transformation
-        p_nom = R @ p + t
+        p_nom = R @ p_arr + t
 
         # CIS I Jacobian w.r.t. pose perturbation eta = [alpha; epsilon]
         # Right convention: d p' / d eta = [-R skew(p_in), R]
         J_eta = np.zeros((3, 6), dtype=float)
-        J_eta[:, :3] = -R @ skew(p)         # d p' / d alpha (input point)
+        J_eta[:, :3] = -R @ skew(p_arr)     # d p' / d alpha (input point)
         J_eta[:, 3:] = R                    # d p' / d epsilon
 
         Cp_pose = J_eta @ self.C @ J_eta.T
@@ -264,6 +308,9 @@ class UncertainTransform:
 
         # Defensive symmetrization
         Cp_out = 0.5 * (Cp_out + Cp_out.T)
+
+        if return_point:
+            return Point(float(p_nom[0]), float(p_nom[1]), float(p_nom[2])), Cp_out
         return p_nom, Cp_out
 
     def __post_init__(self) -> None:

@@ -1,5 +1,6 @@
+import math
 import numpy as np
-from uncertainty_networks import UncertainTransform
+from uncertainty_networks import UncertainTransform, Point, Rot, Frame
 
 
 def test_compose_covariance_symmetry_and_growth():
@@ -50,3 +51,52 @@ def test_rotation_only_noise_increases_with_distance():
 
     # Far point should have larger variance due to rotation-induced term
     assert np.trace(Cp_far) > np.trace(Cp_near)
+
+
+# ── spatial_math integration ──────────────────────────────────────────────────
+
+def test_from_frame_roundtrip():
+    """UncertainTransform.from_frame() then to_frame() should recover the same R and p."""
+    R = Rot(axis='z', angle=math.pi / 4)
+    p = Point(0.1, 0.2, 0.3)
+    frame = Frame(R, p)
+    C = 1e-4 * np.eye(6)
+
+    U = UncertainTransform.from_frame(frame, C)
+
+    # Check nominal matrix was built correctly
+    assert np.allclose(U.F_nom[:3, :3], R.matrix, atol=1e-12)
+    assert np.allclose(U.F_nom[:3, 3], [0.1, 0.2, 0.3], atol=1e-12)
+
+    # Round-trip back to Frame
+    frame2 = U.to_frame()
+    assert np.allclose(frame2.R.matrix, R.matrix, atol=1e-12)
+    assert math.isclose(frame2.p.x, 0.1) and math.isclose(frame2.p.y, 0.2) and math.isclose(frame2.p.z, 0.3)
+
+
+def test_from_frame_zero_covariance_default():
+    """from_frame with no C argument should default to zero covariance."""
+    frame = Frame(Rot(axis='x', angle=0.0), Point(0.0, 0.0, 0.0))
+    U = UncertainTransform.from_frame(frame)
+    assert np.allclose(U.C, np.zeros((6, 6)))
+
+
+def test_transform_point_accepts_point_type():
+    """transform_point should accept a Point and return a Point."""
+    F = np.eye(4); F[:3, 3] = [1.0, 0.0, 0.0]
+    C = 1e-6 * np.eye(6)
+    U = UncertainTransform(F, C)
+
+    p_in = Point(0.0, 0.0, 0.0)
+    p_out, Cp_out = U.transform_point(p_in)
+
+    assert isinstance(p_out, Point)
+    assert math.isclose(p_out.x, 1.0) and math.isclose(p_out.y, 0.0) and math.isclose(p_out.z, 0.0)
+    assert Cp_out.shape == (3, 3)
+
+
+def test_transform_point_array_unchanged():
+    """Passing a numpy array to transform_point should still return a numpy array."""
+    U = UncertainTransform(np.eye(4), 1e-6 * np.eye(6))
+    p_out, _ = U.transform_point(np.array([1.0, 2.0, 3.0]))
+    assert isinstance(p_out, np.ndarray)

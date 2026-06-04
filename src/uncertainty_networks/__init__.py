@@ -22,6 +22,7 @@ Mathematical reference: docs/math_note.pdf
 """
 
 from .uncertain_geometry import UncertainTransform
+from .spatial_math import Point, Rot, Frame
 from .network import (
     GeometricNetwork,
     PathResult,
@@ -44,6 +45,8 @@ from .closed_loop import (
 __all__ = [
     # Core geometry
     "UncertainTransform",
+    # Spatial math primitives
+    "Point", "Rot", "Frame",
     # Network
     "GeometricNetwork",
     "PathResult",
