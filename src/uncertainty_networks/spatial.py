@@ -38,6 +38,7 @@ class Point:
 
 
 # TBD: rotations along multiple axis through the ZYX euler angle convention
+# Add inverse of Rotation matrix
 class Rot:
     def __init__(self, axis: str = None, angle: float = None, matrix: np.ndarray = None):
         if matrix is not None:
@@ -77,7 +78,7 @@ class Rot:
             return Rot(matrix=self._matrix @ other.matrix)
         else:
             raise TypeError("Unsupported multiplication")
-
+# Add inverse of frame 
 class Frame:
     def __init__(self, R: Rot, p: Point):
         self.R = R
