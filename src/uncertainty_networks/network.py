@@ -55,6 +55,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from .uncertain_geometry import UncertainTransform
+from .uncertain_types import uFrame
 from .se3 import adjoint_se3, inv_se3, skew
 
 
@@ -229,6 +230,9 @@ class GeometricNetwork:
         -------
         edge_id : str
         """
+        if isinstance(T_src_dst, uFrame):
+            T_src_dst = T_src_dst.to_uncertain_transform()
+
         if edge_type not in _VALID_EDGE_TYPES:
             raise ValueError(
                 f"edge_type must be one of {sorted(_VALID_EDGE_TYPES)}, got '{edge_type}'"

@@ -53,7 +53,7 @@ def test_rotation_only_noise_increases_with_distance():
     assert np.trace(Cp_far) > np.trace(Cp_near)
 
 
-# ── spatial_math integration ──────────────────────────────────────────────────
+# ── nominal_types integration ─────────────────────────────────────────────────
 
 def test_from_frame_roundtrip():
     """UncertainTransform.from_frame() then to_frame() should recover the same R and p."""

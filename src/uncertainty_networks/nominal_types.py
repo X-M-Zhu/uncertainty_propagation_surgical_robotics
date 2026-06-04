@@ -29,7 +29,7 @@ class Point:
 
     def __add__(self, other: 'Point') -> 'Point':
         if not isinstance(other, Point):
-            raise TypeError("Can only add a Point to another Point")
+            return NotImplemented
         res_vec = self._vec + other.vec
         return Point(res_vec[0, 0], res_vec[1, 0], res_vec[2, 0])
 
@@ -72,7 +72,7 @@ class Rot:
         elif isinstance(other, Rot):
             return Rot(matrix=self._matrix @ other.matrix)
         else:
-            raise TypeError("Unsupported multiplication")
+            return NotImplemented
 
 class Frame:
     def __init__(self, R: Rot, p: Point):
@@ -86,3 +86,5 @@ class Frame:
         elif isinstance(other, Frame):
             # F2 * F1 = F2.R * F1 + F2.p
             return Frame(R=self.R * other.R, p=self.R * other.p + self.p)
+        else:
+            return NotImplemented

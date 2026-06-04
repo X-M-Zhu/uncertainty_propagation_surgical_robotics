@@ -33,7 +33,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .se3 import adjoint_se3, inv_se3, is_se3, skew
-from .spatial_math import Point, Rot, Frame
+from .nominal_types import Point, Rot, Frame
 
 Array = np.ndarray
 

@@ -22,7 +22,8 @@ Mathematical reference: docs/math_note.pdf
 """
 
 from .uncertain_geometry import UncertainTransform
-from .spatial_math import Point, Rot, Frame
+from .nominal_types import Point, Rot, Frame
+from .uncertain_types import uVector, uPoint, uRot, uFrame
 from .network import (
     GeometricNetwork,
     PathResult,
@@ -47,6 +48,8 @@ __all__ = [
     "UncertainTransform",
     # Spatial math primitives
     "Point", "Rot", "Frame",
+    # Uncertain types (Dr. Taylor CIS I API)
+    "uVector", "uPoint", "uRot", "uFrame",
     # Network
     "GeometricNetwork",
     "PathResult",
