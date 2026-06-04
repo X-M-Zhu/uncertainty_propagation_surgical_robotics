@@ -1,7 +1,7 @@
 import unittest
 import math
 import numpy as np
-from src.uncertainty_networks.spatial_math import Point, Rot, Frame 
+from src.uncertainty_networks.spatial import Point, Rot, Frame 
 
 class TestSpatialMath(unittest.TestCase):
 
