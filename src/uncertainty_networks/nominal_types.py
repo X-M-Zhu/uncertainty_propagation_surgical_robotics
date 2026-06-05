@@ -29,7 +29,7 @@ class Point:
 
     def __add__(self, other: 'Point') -> 'Point':
         if not isinstance(other, Point):
-            return NotImplemented
+            raise TypeError("Can only add a Point to another Point")
         res_vec = self._vec + other.vec
         return Point(res_vec[0, 0], res_vec[1, 0], res_vec[2, 0])
 
@@ -38,6 +38,7 @@ class Point:
 
 
 # TBD: rotations along multiple axis through the ZYX euler angle convention
+# Add inverse of Rotation matrix
 class Rot:
     def __init__(self, axis: str = None, angle: float = None, matrix: np.ndarray = None):
         if matrix is not None:
@@ -64,6 +65,10 @@ class Rot:
         else:
             raise ValueError(f"Invalid axis: {axis}")
 
+    def inv(self) -> 'Rot':
+        """Returns the inverse rotation nominal matrix."""
+        return Rot(matrix=self._matrix.T)
+
     def __mul__(self, other):
         if isinstance(other, Point):
             # [3,3] matrix @ [3,1] vector -> yields [3,1] matrix result
@@ -72,8 +77,8 @@ class Rot:
         elif isinstance(other, Rot):
             return Rot(matrix=self._matrix @ other.matrix)
         else:
-            return NotImplemented
-
+            raise TypeError("Unsupported multiplication")
+# Add inverse of frame 
 class Frame:
     def __init__(self, R: Rot, p: Point):
         self.R = R
@@ -86,5 +91,11 @@ class Frame:
         elif isinstance(other, Frame):
             # F2 * F1 = F2.R * F1 + F2.p
             return Frame(R=self.R * other.R, p=self.R * other.p + self.p)
-        else:
-            return NotImplemented
+
+    def inv(self) -> 'Frame':
+        """Returns the inverse homogeneous transformation frame."""
+        R_inv = self.R.inv()
+        # p_inv = -R^T * p
+        p_inv_vec = -R_inv.matrix @ self.p.vec
+        p_inv = Point(p_inv_vec[0, 0], p_inv_vec[1, 0], p_inv_vec[2, 0])
+        return Frame(R=R_inv, p=p_inv)

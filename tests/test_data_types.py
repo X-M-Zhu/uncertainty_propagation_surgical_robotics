@@ -63,6 +63,17 @@ class TestSpatialMath(unittest.TestCase):
         expected_matrix = R1.matrix @ R2.matrix
         np.testing.assert_allclose(R3.matrix, expected_matrix, atol=1e-7)
 
+    def test_rotation_inverse(self):
+        """Verify that R * R_inv results in the Identity Matrix."""
+        R = Rot(axis='y', angle=math.pi / 4)
+        R_inv = R.inv()
+        identity = np.eye(3)
+        
+        # R * R_inv = I
+        actual_identity = R.matrix @ R_inv.matrix
+        np.testing.assert_allclose(actual_identity, identity, atol=1e-7)
+        np.testing.assert_allclose(R_inv.matrix, R.matrix.T, atol=1e-7)
+
     def test_frame_times_point(self):
             """Verify p2 = F * p1 basic transformation formula (R * p1 + p)."""
             # Frame translated by (0, 10, 0) and rotated 90 deg around Z
@@ -102,6 +113,26 @@ class TestSpatialMath(unittest.TestCase):
         self.assertAlmostEqual(F3.p.x, expected_p.x)
         self.assertAlmostEqual(F3.p.y, expected_p.y)
         self.assertAlmostEqual(F3.p.z, expected_p.z)
+
+    def test_frame_inverse(self):
+        """Verify that F * F_inv yields an Identity transformation."""
+        R = Rot(axis='z', angle=math.pi / 3)
+        p = Point(2.0, -3.0, 5.0)
+        F = Frame(R, p)
+        
+        F_inv = F.inv()
+        F_identity = F * F_inv
+        
+        np.testing.assert_allclose(F_identity.R.matrix, np.eye(3), atol=1e-7)
+        self.assertAlmostEqual(F_identity.p.x, 0.0, places=7)
+        self.assertAlmostEqual(F_identity.p.y, 0.0, places=7)
+        self.assertAlmostEqual(F_identity.p.z, 0.0, places=7)
+        
+        expected_R_inv = R.matrix.T
+        expected_p_inv = - (R.matrix.T @ p.vec)
+        
+        np.testing.assert_allclose(F_inv.R.matrix, expected_R_inv, atol=1e-7)
+        np.testing.assert_allclose(F_inv.p.vec, expected_p_inv, atol=1e-7)
 
 if __name__ == '__main__':
     unittest.main()
