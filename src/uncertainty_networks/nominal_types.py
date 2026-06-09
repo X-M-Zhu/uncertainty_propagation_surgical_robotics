@@ -27,15 +27,9 @@ class vct3:
         """Returns the raw [3, 1] NumPy array."""
         return self._vec
 
-<<<<<<< HEAD
     def __add__(self, other: 'vct3') -> 'vct3':
         if not isinstance(other, vct3):
             return NotImplemented
-=======
-    def __add__(self, other: 'Point') -> 'Point':
-        if not isinstance(other, Point):
-            raise TypeError("Can only add a Point to another Point")
->>>>>>> 15ca538288b97a497e2cf3949e5deab74a6d512c
         res_vec = self._vec + other.vec
         return vct3(res_vec[0, 0], res_vec[1, 0], res_vec[2, 0])
 
@@ -82,9 +76,9 @@ class Rot:
             return vct3(res_vec[0, 0], res_vec[1, 0], res_vec[2, 0])
         elif isinstance(other, Rot):
             return Rot(matrix=self._matrix @ other.matrix)
-        else:
-            raise TypeError("Unsupported multiplication")
-# Add inverse of frame 
+        return NotImplemented
+
+# Add inverse of frame
 class Frame:
     def __init__(self, R: Rot, p: vct3):
         self.R = R
@@ -97,11 +91,12 @@ class Frame:
         elif isinstance(other, Frame):
             # F2 * F1 = F2.R * F1 + F2.p
             return Frame(R=self.R * other.R, p=self.R * other.p + self.p)
+        return NotImplemented
 
     def inv(self) -> 'Frame':
         """Returns the inverse homogeneous transformation frame."""
         R_inv = self.R.inv()
         # p_inv = -R^T * p
         p_inv_vec = -R_inv.matrix @ self.p.vec
-        p_inv = Point(p_inv_vec[0, 0], p_inv_vec[1, 0], p_inv_vec[2, 0])
+        p_inv = vct3(p_inv_vec[0, 0], p_inv_vec[1, 0], p_inv_vec[2, 0])
         return Frame(R=R_inv, p=p_inv)

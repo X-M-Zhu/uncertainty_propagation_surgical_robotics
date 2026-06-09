@@ -117,7 +117,7 @@ class TestSpatialMath(unittest.TestCase):
     def test_frame_inverse(self):
         """Verify that F * F_inv yields an Identity transformation."""
         R = Rot(axis='z', angle=math.pi / 3)
-        p = Point(2.0, -3.0, 5.0)
+        p = vct3(2.0, -3.0, 5.0)
         F = Frame(R, p)
         
         F_inv = F.inv()

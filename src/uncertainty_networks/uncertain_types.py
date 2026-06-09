@@ -255,6 +255,36 @@ class uRot:
             return uRot(Rot(matrix=R3), self.C.copy())
         return NotImplemented
 
+    # ── convention bridge ──
+    @classmethod
+    def from_left_perturbation(cls, R: Rot, C_left: np.ndarray) -> "uRot":
+        """Construct a uRot from a left-convention (world-frame) rotation covariance.
+
+        Left model:  R_true = Exp(alpha_L) * R_nom
+        Right model: R_true = R_nom * Exp(alpha_R)
+
+        Relationship (first-order):  alpha_L = R_nom @ alpha_R
+            => C_left  = R_nom @ C_right @ R_nom^T
+            => C_right = R_nom^T @ C_left @ R_nom
+        """
+        C_left = np.asarray(C_left, dtype=float)
+        R_mat = R.matrix
+        C_right = R_mat.T @ C_left @ R_mat
+        return cls(R, 0.5 * (C_right + C_right.T))
+
+    def to_right_perturbation(self) -> "uRot":
+        """No-op — covariance is already in right (body-frame) convention."""
+        return uRot(self._R, self.C.copy())
+
+    def to_left_perturbation(self) -> "uRot":
+        """Convert right-convention (body-frame) covariance to left-convention (world-frame).
+
+        C_left = R_nom @ C_right @ R_nom^T
+        """
+        R_mat = self._R.matrix
+        C_left = R_mat @ self.C @ R_mat.T
+        return uRot(self._R, 0.5 * (C_left + C_left.T))
+
     def __repr__(self):
         return f"uRot(C_diag={np.diag(self.C)})"
 
@@ -346,6 +376,38 @@ class uFrame:
 
     def to_uncertain_transform(self) -> UncertainTransform:
         return self._ut
+
+    # ── convention bridge ──
+    @classmethod
+    def from_left_perturbation(cls, frame_or_F_nom, C_left: np.ndarray) -> "uFrame":
+        """Construct a uFrame from a left-convention (world-frame) pose covariance.
+
+        Left model:  T_true = Exp(eta_L) * F_nom
+        Right model: T_true = F_nom * Exp(eta_R)
+
+        Relationship (first-order):  eta_L = Ad_{F_nom} @ eta_R
+            => C_right = Ad_{F_nom^{-1}} @ C_left @ Ad_{F_nom^{-1}}^T
+
+        Accepts either a Frame object or a raw 4×4 numpy array as the nominal transform.
+        """
+        if isinstance(frame_or_F_nom, Frame):
+            F_nom = np.eye(4, dtype=float)
+            F_nom[:3, :3] = frame_or_F_nom.R.matrix
+            F_nom[:3, 3] = [frame_or_F_nom.p.x, frame_or_F_nom.p.y, frame_or_F_nom.p.z]
+        else:
+            F_nom = np.asarray(frame_or_F_nom, dtype=float)
+        return cls(UncertainTransform.from_left_perturbation(F_nom, C_left))
+
+    def to_right_perturbation(self) -> "uFrame":
+        """No-op — covariance is already in right (body-frame) convention."""
+        return uFrame(self._ut.to_right_perturbation())
+
+    def to_left_perturbation(self) -> "uFrame":
+        """Convert right-convention (body-frame) covariance to left-convention (world-frame).
+
+        C_left = Ad_{F_nom} @ C_right @ Ad_{F_nom}^T
+        """
+        return uFrame(self._ut.to_left_perturbation())
 
     # ── multiplication ──
     def __mul__(self, other):

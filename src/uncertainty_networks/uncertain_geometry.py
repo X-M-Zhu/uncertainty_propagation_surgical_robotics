@@ -199,6 +199,42 @@ class UncertainTransform:
         """
         return self.compose(other)
 
+    @classmethod
+    def from_left_perturbation(cls, F_nom: Array, C_left: Array) -> "UncertainTransform":
+        r"""
+        Construct an UncertainTransform from a *left*-perturbation covariance.
+
+        Left model:   T_true = Exp(eta_L) * F_nom
+        Right model:  T_true = F_nom      * Exp(eta_R)
+
+        Relationship:
+            eta_L = Ad_{F_nom} * eta_R
+            =>  C_left  = Ad_{F_nom}     * C_right * Ad_{F_nom}^T
+            =>  C_right = Ad_{F_nom^{-1}} * C_left  * Ad_{F_nom^{-1}}^T
+
+        Use this when an external source (another library, a sensor driver,
+        a paper that uses the world-frame convention) provides a covariance in
+        the left-perturbation convention and you need to feed it into this
+        right-perturbation framework.
+
+        Parameters
+        ----------
+        F_nom : array-like, shape (4,4)
+            Nominal SE(3) transform.
+        C_left : array-like, shape (6,6)
+            Covariance expressed in the *left*-perturbation convention.
+
+        Returns
+        -------
+        UncertainTransform
+            Same nominal transform, covariance converted to right-perturbation.
+        """
+        F_nom  = np.asarray(F_nom,  dtype=float)
+        C_left = np.asarray(C_left, dtype=float)
+        Ad_inv = adjoint_se3(inv_se3(F_nom))
+        C_right = Ad_inv @ C_left @ Ad_inv.T
+        return cls(F_nom, C_right)
+
     def to_right_perturbation(self) -> "UncertainTransform":
         r"""
         Return this transform — covariance is already in right-perturbation convention.
