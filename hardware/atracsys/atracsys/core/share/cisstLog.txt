@@ -1,0 +1,13 @@
+M- cisst 1.3.0 (git: 1.3.0-5-g285e72e5)
+M- CISST_ROOT: /home/christine/catkin_ws/build/cisst
+M- cisst share: /home/christine/catkin_ws/build/cisst/share/cisst-1.3
+M- cmn_m: 1, cmn_kg: 1, CISST_USE_SI_UNITS is set to 1
+M- Class cmnClassRegister: SetLogMaskClassMatching: log LoD has been set to "-D -M -W -E D- M- W- E- " for the following classes matching "mtsAtracsysFusionTrack": mtsAtracsysFusionTrack, mtsAtracsysFusionTrackStrayMarkersQtWidget, 
+M- osaThread::CreateInternal: create thread named: Unnamed
+M- osaThread::CreateInternal: create thread named: Unnamed
+D- Class mtsAtracsysFusionTrack: AddStateTable: added state table "configuration" and corresponding interface "StateTableconfiguration" to task "atracsys"
+M- Class mtsAtracsysFusionTrack: Configure: using managerMarker.json
+M- Atracsys SDK Version v4.9.1 (1714640937) Linux-5.15.0-1053-azure
+E- File: mtsAtracsysFusionTrack.cpp Line: 270 -  Configure: no Atracsys devices found
+E- File: mtsAtracsysFusionTrack.cpp Line: 620 -  Configure: failed to initialize device (atracsys)
+E- File: atracsys.cpp Line: 88 -  Failed to initialize Atracsys hardware --- is device connected and powered on?

@@ -1,0 +1,15 @@
+{
+    "tools":
+    [
+        {
+            "name": "Anatomy",
+            "json-file": "geometry_anatomy_reference_5_24.json"
+        },
+        {
+            "name": "Anspoch_drill",
+            "json-file": "geometry_anspoch_drill.json",
+            "reference": "Anatomy"
+        }
+    ]
+}
+
