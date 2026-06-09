@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from uncertainty_networks import UncertainTransform, Point, Rot, Frame
+from uncertainty_networks import UncertainTransform, vct3, Rot, Frame
 
 
 def test_compose_covariance_symmetry_and_growth():
@@ -58,7 +58,7 @@ def test_rotation_only_noise_increases_with_distance():
 def test_from_frame_roundtrip():
     """UncertainTransform.from_frame() then to_frame() should recover the same R and p."""
     R = Rot(axis='z', angle=math.pi / 4)
-    p = Point(0.1, 0.2, 0.3)
+    p = vct3(0.1, 0.2, 0.3)
     frame = Frame(R, p)
     C = 1e-4 * np.eye(6)
 
@@ -76,21 +76,21 @@ def test_from_frame_roundtrip():
 
 def test_from_frame_zero_covariance_default():
     """from_frame with no C argument should default to zero covariance."""
-    frame = Frame(Rot(axis='x', angle=0.0), Point(0.0, 0.0, 0.0))
+    frame = Frame(Rot(axis='x', angle=0.0), vct3(0.0, 0.0, 0.0))
     U = UncertainTransform.from_frame(frame)
     assert np.allclose(U.C, np.zeros((6, 6)))
 
 
 def test_transform_point_accepts_point_type():
-    """transform_point should accept a Point and return a Point."""
+    """transform_point should accept a vct3 and return a vct3."""
     F = np.eye(4); F[:3, 3] = [1.0, 0.0, 0.0]
     C = 1e-6 * np.eye(6)
     U = UncertainTransform(F, C)
 
-    p_in = Point(0.0, 0.0, 0.0)
+    p_in = vct3(0.0, 0.0, 0.0)
     p_out, Cp_out = U.transform_point(p_in)
 
-    assert isinstance(p_out, Point)
+    assert isinstance(p_out, vct3)
     assert math.isclose(p_out.x, 1.0) and math.isclose(p_out.y, 0.0) and math.isclose(p_out.z, 0.0)
     assert Cp_out.shape == (3, 3)
 

@@ -33,7 +33,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .se3 import adjoint_se3, inv_se3, is_se3, skew
-from .nominal_types import Point, Rot, Frame
+from .nominal_types import vct3, Rot, Frame
 
 Array = np.ndarray
 
@@ -120,9 +120,9 @@ class UncertainTransform:
         """
         return Frame(
             R=Rot(matrix=self.F_nom[:3, :3]),
-            p=Point(float(self.F_nom[0, 3]),
-                    float(self.F_nom[1, 3]),
-                    float(self.F_nom[2, 3])),
+            p=vct3(float(self.F_nom[0, 3]),
+                   float(self.F_nom[1, 3]),
+                   float(self.F_nom[2, 3])),
         )
 
     def inv(self) -> "UncertainTransform":
@@ -279,7 +279,7 @@ class UncertainTransform:
         Cp_out : ndarray, shape (3,3)
             Propagated covariance of transformed point.
         """
-        return_point = isinstance(p, Point)
+        return_point = isinstance(p, vct3)
         if return_point:
             p_arr = np.array([p.x, p.y, p.z], dtype=float)
         else:
@@ -310,7 +310,7 @@ class UncertainTransform:
         Cp_out = 0.5 * (Cp_out + Cp_out.T)
 
         if return_point:
-            return Point(float(p_nom[0]), float(p_nom[1]), float(p_nom[2])), Cp_out
+            return vct3(float(p_nom[0]), float(p_nom[1]), float(p_nom[2])), Cp_out
         return p_nom, Cp_out
 
     def __post_init__(self) -> None:

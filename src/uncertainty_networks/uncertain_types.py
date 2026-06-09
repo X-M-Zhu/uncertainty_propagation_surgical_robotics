@@ -4,7 +4,7 @@
 """
 uncertain_types.py — User-facing uncertain Cartesian types for CIS I.
 
-Mirrors the nominal types (Point, Rot, Frame) from spatial_math.py
+Mirrors the nominal types (vct3, Rot, Frame) from spatial_math.py
 but carries covariance. All heavy math delegates to UncertainTransform.
 
 API (following Dr. Taylor's CIS I specification):
@@ -52,7 +52,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.spatial.transform import Rotation as _ScipyRot
 
-from .nominal_types import Point, Rot, Frame
+from .nominal_types import vct3, Rot, Frame
 from .uncertain_geometry import UncertainTransform
 from .se3 import skew
 
@@ -96,22 +96,22 @@ class uPoint:
     """
     Uncertain 3-D point.
 
-        up = uPoint(p)              Point, zero covariance
-        up = uPoint(p, cov)         Point + 3×3 covariance
+        up = uPoint(p)              vct3, zero covariance
+        up = uPoint(p, cov)         vct3 + 3×3 covariance
         up = uPoint([x,y,z], cov)   array-like also accepted
     """
 
     def __init__(self, p, C=None):
-        if isinstance(p, Point):
+        if isinstance(p, vct3):
             self._p = p
         else:
             arr = np.asarray(p, dtype=float).ravel()
-            self._p = Point(arr[0], arr[1], arr[2])
+            self._p = vct3(arr[0], arr[1], arr[2])
         self.C = np.zeros((3, 3), dtype=float) if C is None else np.asarray(C, dtype=float)
 
     # ── properties ──
     @property
-    def p(self) -> Point:
+    def p(self) -> vct3:
         return self._p
 
     @property
@@ -130,12 +130,12 @@ class uPoint:
     def __add__(self, other):
         if isinstance(other, uPoint):
             return uPoint(self._p + other._p, self.C + other.C)
-        if isinstance(other, Point):
+        if isinstance(other, vct3):
             return uPoint(self._p + other, self.C.copy())
         return NotImplemented
 
     def __radd__(self, other):
-        if isinstance(other, Point):
+        if isinstance(other, vct3):
             return uPoint(other + self._p, self.C.copy())
         return NotImplemented
 
@@ -223,14 +223,14 @@ class uRot:
             p_nom = R_mat @ p_arr
             J_alpha = -R_mat @ skew(p_arr)
             C_out = J_alpha @ self.C @ J_alpha.T + R_mat @ other.C @ R_mat.T
-            return uPoint(Point(*p_nom), 0.5 * (C_out + C_out.T))
+            return uPoint(vct3(*p_nom), 0.5 * (C_out + C_out.T))
 
-        if isinstance(other, Point):
+        if isinstance(other, vct3):
             p_arr = np.array([other.x, other.y, other.z])
             p_nom = R_mat @ p_arr
             J_alpha = -R_mat @ skew(p_arr)
             C_out = J_alpha @ self.C @ J_alpha.T
-            return uPoint(Point(*p_nom), 0.5 * (C_out + C_out.T))
+            return uPoint(vct3(*p_nom), 0.5 * (C_out + C_out.T))
 
         if isinstance(other, uRot):
             R2 = other._R.matrix
@@ -313,7 +313,7 @@ class uFrame:
             C[3:, 3:] = second.C
             self._ut = UncertainTransform(F_nom, C)
 
-        elif isinstance(first, uRot) and isinstance(second, Point):
+        elif isinstance(first, uRot) and isinstance(second, vct3):
             # uFrame(uR, p)
             F_nom = np.eye(4, dtype=float)
             F_nom[:3, :3] = first.R.matrix
@@ -325,7 +325,7 @@ class uFrame:
         else:
             raise TypeError(
                 f"uFrame: unsupported arguments ({type(first).__name__}, {type(second).__name__}). "
-                "Expected (Frame, cov?), (uRot, uPoint), (Rot, uPoint), or (uRot, Point)."
+                "Expected (Frame, cov?), (uRot, uPoint), (Rot, uPoint), or (uRot, vct3)."
             )
 
     # ── properties ──
@@ -367,7 +367,7 @@ class uFrame:
             p_out, C_out = self._ut.transform_point(other.p, Cp=other.C)
             return uPoint(p_out, C_out)
 
-        if isinstance(other, Point):
+        if isinstance(other, vct3):
             p_out, C_out = self._ut.transform_point(other)
             return uPoint(p_out, C_out)
 

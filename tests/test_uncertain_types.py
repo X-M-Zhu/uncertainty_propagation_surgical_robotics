@@ -10,7 +10,7 @@ Covers every operator overload listed in the spec:
 import math
 import numpy as np
 import pytest
-from uncertainty_networks import Point, Rot, Frame, uVector, uPoint, uRot, uFrame
+from uncertainty_networks import vct3, Rot, Frame, uVector, uPoint, uRot, uFrame
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ def test_uvector_explicit_covariance():
 # ── uPoint ────────────────────────────────────────────────────────────────────
 
 def test_upoint_from_point():
-    up = uPoint(Point(1.0, 2.0, 3.0), _cov3())
+    up = uPoint(vct3(1.0, 2.0, 3.0), _cov3())
     assert math.isclose(up.x, 1.0)
     assert math.isclose(up.y, 2.0)
     assert math.isclose(up.z, 3.0)
@@ -52,13 +52,13 @@ def test_upoint_from_array():
 
 
 def test_upoint_default_zero_covariance():
-    up = uPoint(Point(0.0, 0.0, 0.0))
+    up = uPoint(vct3(0.0, 0.0, 0.0))
     assert np.allclose(up.C, np.zeros((3, 3)))
 
 
 def test_upoint_add_two_upoints():
-    up1 = uPoint(Point(1.0, 0.0, 0.0), _cov3(1e-4))
-    up2 = uPoint(Point(0.0, 2.0, 0.0), _cov3(2e-4))
+    up1 = uPoint(vct3(1.0, 0.0, 0.0), _cov3(1e-4))
+    up2 = uPoint(vct3(0.0, 2.0, 0.0), _cov3(2e-4))
     up3 = up1 + up2
     assert math.isclose(up3.x, 1.0)
     assert math.isclose(up3.y, 2.0)
@@ -66,8 +66,8 @@ def test_upoint_add_two_upoints():
 
 
 def test_upoint_add_nominal_plus_uncertain():
-    p1   = Point(1.0, 0.0, 0.0)
-    up2  = uPoint(Point(0.0, 1.0, 0.0), _cov3(5e-4))
+    p1   = vct3(1.0, 0.0, 0.0)
+    up2  = uPoint(vct3(0.0, 1.0, 0.0), _cov3(5e-4))
     up3a = p1 + up2      # Point + uPoint  (__radd__)
     up3b = up2 + p1      # uPoint + Point  (__add__)
     for up3 in (up3a, up3b):
@@ -77,8 +77,8 @@ def test_upoint_add_nominal_plus_uncertain():
 
 
 def test_upoint_add_covariance_grows():
-    up1 = uPoint(Point(0, 0, 0), _cov3(1e-4))
-    up2 = uPoint(Point(0, 0, 0), _cov3(1e-4))
+    up1 = uPoint(vct3(0, 0, 0), _cov3(1e-4))
+    up2 = uPoint(vct3(0, 0, 0), _cov3(1e-4))
     up3 = up1 + up2
     assert np.all(np.diag(up3.C) >= np.diag(up1.C))
 
@@ -113,7 +113,7 @@ def test_urot_from_uaxis_angle():
 
 
 def test_urot_from_upoint_axis_angle():
-    uaxis = uPoint(Point(0.0, 0.0, 1.0), _cov3(1e-3))
+    uaxis = uPoint(vct3(0.0, 0.0, 1.0), _cov3(1e-3))
     uR = uRot(uaxis, math.pi / 4)
     assert np.any(uR.C > 0)
     expected = Rot(axis='z', angle=math.pi / 4)
@@ -134,7 +134,7 @@ def test_urot_from_uaxis_uangle():
 
 def test_urot_times_point():
     uR = uRot(Rot(axis='z', angle=math.pi / 2), _cov3(1e-4))
-    p  = Point(1.0, 0.0, 0.0)
+    p  = vct3(1.0, 0.0, 0.0)
     up = uR * p
     assert isinstance(up, uPoint)
     assert math.isclose(up.x,  0.0, abs_tol=1e-7)
@@ -144,7 +144,7 @@ def test_urot_times_point():
 
 def test_urot_times_upoint():
     uR  = uRot(Rot(axis='z', angle=0.0), _cov3(1e-4))
-    up1 = uPoint(Point(1.0, 0.0, 0.0), _cov3(1e-4))
+    up1 = uPoint(vct3(1.0, 0.0, 0.0), _cov3(1e-4))
     up2 = uR * up1
     assert isinstance(up2, uPoint)
     # Covariance should be larger than either input alone
@@ -184,7 +184,7 @@ def test_urot_compose_urot_times_rot():
 # ── uFrame ────────────────────────────────────────────────────────────────────
 
 def _make_frame(dx=0.1, dy=0.0, dz=0.0, axis='z', angle=0.0):
-    return Frame(Rot(axis=axis, angle=angle), Point(dx, dy, dz))
+    return Frame(Rot(axis=axis, angle=angle), vct3(dx, dy, dz))
 
 
 def test_uframe_from_frame():
@@ -201,7 +201,7 @@ def test_uframe_default_zero_covariance():
 
 def test_uframe_from_urot_upoint():
     uR = uRot(Rot(axis='z', angle=0.0), _cov3(1e-4))
-    up = uPoint(Point(0.1, 0.0, 0.0), _cov3(2e-4))
+    up = uPoint(vct3(0.1, 0.0, 0.0), _cov3(2e-4))
     uF = uFrame(uR, up)
     np.testing.assert_allclose(uF.C[:3, :3], _cov3(1e-4))
     np.testing.assert_allclose(uF.C[3:, 3:], _cov3(2e-4))
@@ -209,7 +209,7 @@ def test_uframe_from_urot_upoint():
 
 def test_uframe_from_rot_upoint():
     R  = Rot(axis='z', angle=0.0)
-    up = uPoint(Point(0.2, 0.0, 0.0), _cov3(3e-4))
+    up = uPoint(vct3(0.2, 0.0, 0.0), _cov3(3e-4))
     uF = uFrame(R, up)
     np.testing.assert_allclose(uF.C[:3, :3], np.zeros((3, 3)))
     np.testing.assert_allclose(uF.C[3:, 3:], _cov3(3e-4))
@@ -217,7 +217,7 @@ def test_uframe_from_rot_upoint():
 
 def test_uframe_from_urot_point():
     uR = uRot(Rot(axis='z', angle=0.0), _cov3(5e-4))
-    p  = Point(0.3, 0.0, 0.0)
+    p  = vct3(0.3, 0.0, 0.0)
     uF = uFrame(uR, p)
     np.testing.assert_allclose(uF.C[:3, :3], _cov3(5e-4))
     np.testing.assert_allclose(uF.C[3:, 3:], np.zeros((3, 3)))
@@ -255,7 +255,7 @@ def test_frame_times_uframe():
 
 def test_uframe_times_upoint():
     uF  = uFrame(_make_frame(dx=0.5), _cov6(1e-6))
-    up1 = uPoint(Point(0.0, 0.0, 0.0), _cov3(1e-6))
+    up1 = uPoint(vct3(0.0, 0.0, 0.0), _cov3(1e-6))
     up2 = uF * up1
     assert isinstance(up2, uPoint)
     assert math.isclose(up2.x, 0.5, abs_tol=1e-9)
@@ -264,7 +264,7 @@ def test_uframe_times_upoint():
 
 def test_uframe_times_point():
     uF = uFrame(_make_frame(dx=0.5), _cov6(1e-6))
-    p  = Point(0.1, 0.0, 0.0)
+    p  = vct3(0.1, 0.0, 0.0)
     up = uF * p
     assert isinstance(up, uPoint)
     assert math.isclose(up.x, 0.6, abs_tol=1e-9)

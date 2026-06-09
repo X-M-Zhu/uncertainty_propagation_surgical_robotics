@@ -1,13 +1,13 @@
 import unittest
 import math
 import numpy as np
-from src.uncertainty_networks.nominal_types import Point, Rot, Frame
+from src.uncertainty_networks.nominal_types import vct3, Rot, Frame
 
 class TestSpatialMath(unittest.TestCase):
 
     def test_point_initialization_and_properties(self):
         """Verify Point initializes as a [3, 1] vector and properties work."""
-        p = Point(1.0, 2.0, 3.0)
+        p = vct3(1.0, 2.0, 3.0)
         
         # Check internal shape
         self.assertEqual(p.vec.shape, (3, 1))
@@ -19,8 +19,8 @@ class TestSpatialMath(unittest.TestCase):
 
     def test_point_addition(self):
         """Verify p3 = p1 + p2 works correctly."""
-        p1 = Point(1.0, 2.0, 3.0)
-        p2 = Point(4.0, 5.0, 6.0)
+        p1 = vct3(1.0, 2.0, 3.0)
+        p2 = vct3(4.0, 5.0, 6.0)
         p3 = p1 + p2
         
         self.assertAlmostEqual(p3.x, 5.0)
@@ -45,7 +45,7 @@ class TestSpatialMath(unittest.TestCase):
     def test_rotation_times_point(self):
         """Verify p2 = R * p1 shifts coordinates correctly."""
         # Rotate a point on X axis by 90 degrees around Z axis -> should land on Y axis
-        p1 = Point(1.0, 0.0, 0.0)
+        p1 = vct3(1.0, 0.0, 0.0)
         R = Rot(axis='z', angle=math.pi / 2)
         p2 = R * p1
         
@@ -67,13 +67,13 @@ class TestSpatialMath(unittest.TestCase):
             """Verify p2 = F * p1 basic transformation formula (R * p1 + p)."""
             # Frame translated by (0, 10, 0) and rotated 90 deg around Z
             R = Rot(axis='z', angle=math.pi / 2)
-            p_trans = Point(0.0, 10.0, 0.0)
+            p_trans = vct3(0.0, 10.0, 0.0)
             F = Frame(R, p_trans)
             
-            p1 = Point(1.0, 0.0, 0.0)
+            p1 = vct3(1.0, 0.0, 0.0)
             p2 = F * p1
         
-            self.assertIsInstance(p2, Point, "The result of Frame * Point must be a Point object")
+            self.assertIsInstance(p2, vct3, "The result of Frame * vct3 must be a vct3 object")
             self.assertEqual(p2.vec.shape, (3, 1), "The internal vector must maintain a (3, 1) shape")
 
             # R * p1 gives (0, 1, 0). Adding p_trans (0, 10, 0) gives (0, 11, 0)
@@ -84,11 +84,11 @@ class TestSpatialMath(unittest.TestCase):
     def test_frame_times_frame(self):
         """Verify compounding frames: F3 = F2 * F1."""
         R1 = Rot(axis='z', angle=math.pi / 2)
-        p1 = Point(1.0, 0.0, 0.0)
+        p1 = vct3(1.0, 0.0, 0.0)
         F1 = Frame(R1, p1)
 
         R2 = Rot(axis='x', angle=math.pi / 2)
-        p2 = Point(0.0, 5.0, 0.0)
+        p2 = vct3(0.0, 5.0, 0.0)
         F2 = Frame(R2, p2)
 
         F3 = F2 * F1

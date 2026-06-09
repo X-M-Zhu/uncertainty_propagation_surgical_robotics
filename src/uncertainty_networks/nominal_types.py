@@ -3,15 +3,15 @@ import math
 import numpy as np
 
 @dataclass
-class Point:
+class vct3:
     x: float
     y: float
     z: float
 
     def __init__(self, x: float, y: float, z: float):
         # Initialize internally as a [3, 1] column vector
-        self._vec = np.array([[x], 
-                              [y], 
+        self._vec = np.array([[x],
+                              [y],
                               [z]], dtype=float)
 
     # Properties to easily read x, y, z back out as scalar values
@@ -27,14 +27,14 @@ class Point:
         """Returns the raw [3, 1] NumPy array."""
         return self._vec
 
-    def __add__(self, other: 'Point') -> 'Point':
-        if not isinstance(other, Point):
+    def __add__(self, other: 'vct3') -> 'vct3':
+        if not isinstance(other, vct3):
             return NotImplemented
         res_vec = self._vec + other.vec
-        return Point(res_vec[0, 0], res_vec[1, 0], res_vec[2, 0])
+        return vct3(res_vec[0, 0], res_vec[1, 0], res_vec[2, 0])
 
     def __repr__(self):
-        return f"Point(x={self.x:.2f}, y={self.y:.2f}, z={self.z:.2f})\nInternal Vector:\n{self._vec}"
+        return f"vct3(x={self.x:.2f}, y={self.y:.2f}, z={self.z:.2f})\nInternal Vector:\n{self._vec}"
 
 
 # TBD: rotations along multiple axis through the ZYX euler angle convention
@@ -65,22 +65,22 @@ class Rot:
             raise ValueError(f"Invalid axis: {axis}")
 
     def __mul__(self, other):
-        if isinstance(other, Point):
+        if isinstance(other, vct3):
             # [3,3] matrix @ [3,1] vector -> yields [3,1] matrix result
             res_vec = self._matrix @ other.vec
-            return Point(res_vec[0, 0], res_vec[1, 0], res_vec[2, 0])
+            return vct3(res_vec[0, 0], res_vec[1, 0], res_vec[2, 0])
         elif isinstance(other, Rot):
             return Rot(matrix=self._matrix @ other.matrix)
         else:
             return NotImplemented
 
 class Frame:
-    def __init__(self, R: Rot, p: Point):
+    def __init__(self, R: Rot, p: vct3):
         self.R = R
         self.p = p
 
     def __mul__(self, other):
-        if isinstance(other, Point):
+        if isinstance(other, vct3):
             # F * p1 = F.R * p1 + F.p
             return (self.R * other) + self.p
         elif isinstance(other, Frame):
