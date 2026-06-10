@@ -1,7 +1,7 @@
 # Author: X.M. Christine Zhu
 
 """
-Experiment 2 — Analysis: Propagation chain validation.
+Experiment 2 — Analysis: both Anatomy and Drill move together.
 
 For each configuration, compares:
 

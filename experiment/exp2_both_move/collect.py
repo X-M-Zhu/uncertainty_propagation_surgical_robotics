@@ -1,7 +1,7 @@
 # Author: X.M. Christine Zhu
 
 """
-Experiment 2 — Data collection: Propagation chain validation.
+Experiment 2 — Data collection: both Anatomy and Drill move together.
 
 Goal
 ----
@@ -42,11 +42,12 @@ from utils.se3_stats import save_poses_csv, se3_empirical_stats
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 # "Anatomy" is measured in the tracker frame.
-# "Anspoch_drill" has "reference": "Anatomy" in managerMarker.json, so the
-# tracker returns its pose RELATIVE TO Anatomy — this is exactly the F_AB
-# link transform we need for chain validation.
-BODY_A = "Anatomy"       # tracker → Anatomy  (world link)
-BODY_B = "Anspoch_drill" # Anatomy → Drill    (relative link, body-frame)
+# Both bodies are tracked independently in the tracker frame.
+# "reference" is NOT set in managerMarker.json, so measured_cp() returns
+# tracker-frame poses for both.  The relative transform T_AB is computed
+# in Python as inv(T_A[i]) @ T_B[i] from simultaneous pairs (see analyze.py).
+BODY_A = "Anatomy"       # tracker → Anatomy  (world link, tracker frame)
+BODY_B = "Anspoch_drill" # tracker → Drill    (tracker frame)
 N_SAMPLES   = 300   # measurements per body per configuration
 N_CONFIGS   = 5     # number of different physical configurations to measure
 DATA_DIR    = _HERE / "data"

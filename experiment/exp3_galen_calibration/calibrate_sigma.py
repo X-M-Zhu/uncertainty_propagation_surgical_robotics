@@ -170,7 +170,7 @@ def validate_sigma_total(sigma_static: float, sigma_base: float):
 
         tip_node = f"Galen_{labels[-1]}"
         result   = net.query_frame("World", tip_node)
-        C_pred   = result.C
+        C_pred   = result.transform.C
 
         sigma_pred = np.sqrt(np.trace(C_pred[3:, 3:]) / 3.0) * 1000.0
         sigma_emp  = np.sqrt(np.trace(C_emp[3:, 3:])  / 3.0) * 1000.0

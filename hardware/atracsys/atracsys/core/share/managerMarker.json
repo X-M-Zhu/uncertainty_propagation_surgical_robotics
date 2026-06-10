@@ -7,8 +7,7 @@
         },
         {
             "name": "Anspoch_drill",
-            "json-file": "geometry_anspoch_drill.json",
-            "reference": "Anatomy"
+            "json-file": "geometry_anspoch_drill.json"
         }
     ]
 }
