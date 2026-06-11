@@ -8,26 +8,29 @@ used throughout the JHU surgical robotics lab.
 
 Before running any experiment
 ------------------------------
-1. Set CONFIG_PATH below to the full path of your
-   configAtracsysFusionTrack.json file.
+1. Verify CONFIG_PATH below resolves to the correct managerMarker.json on
+   your machine.  The default assumes this repo and the sawAtracsysFusionTrack
+   repo sit side-by-side in the same Desktop folder.
 
-2. For each rigid body you want to track, make sure it has:
-     a) A geometry JSON file (see hardware/atracsys/atracsys/geometry_*.json
-        for the format — four fiducial XYZ positions in mm, an integer id,
-        and an optional pivot point).
-     b) An entry in managerMarker.json under "tools".
+2. All geometry JSON files referenced in managerMarker.json must live in the
+   same directory as managerMarker.json (the tracker searches there by default).
 
 3. The body names passed to get_pose() and collect_samples() must exactly
    match the "name" fields in managerMarker.json.
 
+4. Do NOT set "reference" on any tool in managerMarker.json.  When "reference"
+   is set, measured_cp() returns the pose relative to the reference body (T_AB),
+   not in the tracker frame (T_TB).  All experiment scripts assume tracker-frame
+   poses and compute relative transforms in Python.
+
 Body names currently in managerMarker.json
 ------------------------------------------
-    "Anatomy"        — reference rigid body (4 markers, id=1)
-    "Anspoch_drill"  — tool rigid body, expressed relative to "Anatomy"
+    "Anatomy"        — reference rigid body  (geometry_anatomy_reference_5_24.json, id=1)
+    "Anspoch_drill"  — drill rigid body      (geometry-drill.json, id=50001)
 
 These two bodies cover all three experiments:
-    "Anatomy"        — Exp 1 (move by hand), Exp 2 (world link), Exp 3 (keep visible as reference)
-    "Anspoch_drill"  — Exp 2 (relative link), Exp 3 (attach to Galen EE tip)
+    "Anatomy"        — Exp 1 (moved by hand), Exp 2 (world link)
+    "Anspoch_drill"  — Exp 1 (stays fixed), Exp 2 (chain end), Exp 3 (attach to Galen EE tip)
 """
 
 import os
@@ -35,12 +38,20 @@ import time
 import numpy as np
 
 # ── Path to your tracker configuration file ───────────────────────────────────
-# Update this to the actual path on your machine.
-CONFIG_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "..", "..", "hardware", "atracsys", "atracsys", "core", "share",
-    "configAtracsysFusionTrack.json"
-)
+# Set the environment variable ATRACSYS_CONFIG_PATH to override on any machine.
+# Example (Linux lab computer):
+#   export ATRACSYS_CONFIG_PATH=/home/chris/catkin_ws/src/sawAtracsysFusionTrack/core/share/managerMarker.json
+# Example (Windows personal computer, if repo is on Desktop):
+#   $env:ATRACSYS_CONFIG_PATH = "C:\Users\Chris\OneDrive\Desktop\sawAtracsysFusionTrack\core\share\managerMarker.json"
+#
+# If the variable is not set, falls back to the Desktop sibling-folder layout.
+_DEFAULT_CONFIG = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..", "..", "..",
+    "sawAtracsysFusionTrack", "core", "share",
+    "managerMarker.json"
+))
+CONFIG_PATH = os.environ.get("ATRACSYS_CONFIG_PATH", _DEFAULT_CONFIG)
 
 _TRACKER_NAME = "AtracsysTracker"
 

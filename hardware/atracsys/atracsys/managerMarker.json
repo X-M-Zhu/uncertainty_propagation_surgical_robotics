@@ -7,7 +7,7 @@
         },
         {
             "name": "Anspoch_drill",
-            "json-file": "geometry_anspoch_drill.json"
+            "json-file": "geometry-drill.json"
         }
     ]
 }
