@@ -46,7 +46,7 @@ from utils.se3_stats import save_poses_csv
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-TIP_BODY    = "Anspoch_drill"  # attached to Galen EE; pose reported relative to Anatomy bowl
+TIP_BODY    = "Anspoch_drill"  # attached to Galen EE; pose returned in tracker frame
 N_REPEAT    = 50           # how many times to return to q_star (sub-exp A)
 N_CONFIGS   = 15           # workspace configurations (sub-exp B)
 N_STATIC    = 50           # static measurements per config (sub-exp B)

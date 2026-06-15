@@ -12,7 +12,7 @@ class vct3:
         # Initialize internally as a [3, 1] column vector
         self._vec = np.array([[x],
                               [y],
-                              [z]], dtype=float)
+                              [z]], dtype=np.float64)
 
     # Properties to easily read x, y, z back out as scalar values
     @property
@@ -42,7 +42,7 @@ class vct3:
 class Rot:
     def __init__(self, axis: str = None, angle: float = None, matrix: np.ndarray = None):
         if matrix is not None:
-            self._matrix = np.array(matrix, dtype=float)
+            self._matrix = np.array(matrix, dtype=np.float64)
         elif axis is not None and angle is not None:
             self._matrix = self._build_matrix(axis, angle)
         else:

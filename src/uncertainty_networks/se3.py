@@ -58,14 +58,14 @@ def skew(w: Array) -> Array:
     ndarray, shape (3,3)
         Skew-symmetric matrix.
     """
-    w = np.asarray(w, dtype=float).reshape(3)
+    w = np.asarray(w, dtype=np.float64).reshape(3)
     return np.array(
         [
             [0.0, -w[2], w[1]],
             [w[2], 0.0, -w[0]],
             [-w[1], w[0], 0.0],
         ],
-        dtype=float,
+        dtype=np.float64,
     )
 
 
@@ -95,7 +95,7 @@ def is_se3(T: Array, atol: float = 1e-8) -> bool:
     bool
         True if T has valid SE(3) structure.
     """
-    T = np.asarray(T, dtype=float)
+    T = np.asarray(T, dtype=np.float64)
     if T.shape != (4, 4):
         return False
     if not np.allclose(T[3, :], np.array([0.0, 0.0, 0.0, 1.0]), atol=atol):
@@ -128,14 +128,14 @@ def inv_se3(T: Array) -> Array:
     ndarray, shape (4,4)
         Inverse transform.
     """
-    T = np.asarray(T, dtype=float)
+    T = np.asarray(T, dtype=np.float64)
     if T.shape != (4, 4):
         raise ValueError(f"inv_se3 expects (4,4), got {T.shape}")
 
     R = T[:3, :3]
     p = T[:3, 3]
 
-    T_inv = np.eye(4, dtype=float)
+    T_inv = np.eye(4, dtype=np.float64)
     T_inv[:3, :3] = R.T
     T_inv[:3, 3] = -R.T @ p
     return T_inv
@@ -184,14 +184,14 @@ def adjoint_se3(T: Array) -> Array:
     ndarray, shape (6,6)
         Adjoint matrix.
     """
-    T = np.asarray(T, dtype=float)
+    T = np.asarray(T, dtype=np.float64)
     if T.shape != (4, 4):
         raise ValueError(f"adjoint_se3 expects (4,4), got {T.shape}")
 
     R = T[:3, :3]
     p = T[:3, 3]
 
-    Ad = np.zeros((6, 6), dtype=float)
+    Ad = np.zeros((6, 6), dtype=np.float64)
     Ad[:3, :3] = R
     Ad[3:, 3:] = R
     Ad[3:, :3] = skew(p) @ R
@@ -214,10 +214,10 @@ def make_se3(R: Array, p: Array) -> Array:
     ndarray, shape (4,4)
         Homogeneous transform [[R, p], [0, 1]].
     """
-    R = np.asarray(R, dtype=float).reshape(3, 3)
-    p = np.asarray(p, dtype=float).reshape(3)
+    R = np.asarray(R, dtype=np.float64).reshape(3, 3)
+    p = np.asarray(p, dtype=np.float64).reshape(3)
 
-    T = np.eye(4, dtype=float)
+    T = np.eye(4, dtype=np.float64)
     T[:3, :3] = R
     T[:3, 3] = p
     return T
@@ -243,7 +243,7 @@ def rotz(theta_rad: float) -> Array:
         [[c, -s, 0.0],
          [s,  c, 0.0],
          [0.0, 0.0, 1.0]],
-        dtype=float,
+        dtype=np.float64,
     )
 
 def exp_so3(phi: Array) -> Array:
@@ -271,9 +271,9 @@ def exp_so3(phi: Array) -> Array:
     R : ndarray, shape (3,3)
         Rotation matrix.
     """
-    phi = np.asarray(phi, dtype=float).reshape(3)
+    phi = np.asarray(phi, dtype=np.float64).reshape(3)
     theta = float(np.linalg.norm(phi))
-    I = np.eye(3, dtype=float)
+    I = np.eye(3, dtype=np.float64)
 
     if theta < 1e-12:
         # First-order approximation: R ≈ I + [phi]×
@@ -307,7 +307,7 @@ def log_so3(R: Array) -> Array:
     phi : ndarray, shape (3,)
         Rotation vector.
     """
-    R = np.asarray(R, dtype=float).reshape(3, 3)
+    R = np.asarray(R, dtype=np.float64).reshape(3, 3)
 
     # Clamp for numerical stability
     cos_theta = (np.trace(R) - 1.0) * 0.5
@@ -318,11 +318,11 @@ def log_so3(R: Array) -> Array:
         # For very small angles, use first-order approximation:
         # R ≈ I + [phi]×  =>  [phi]× ≈ (R - Rᵀ)/2
         K = 0.5 * (R - R.T)
-        return np.array([K[2, 1], K[0, 2], K[1, 0]], dtype=float)
+        return np.array([K[2, 1], K[0, 2], K[1, 0]], dtype=np.float64)
 
     # vee(R - Rᵀ)
     K = (R - R.T)
-    vee = np.array([K[2, 1], K[0, 2], K[1, 0]], dtype=float)
+    vee = np.array([K[2, 1], K[0, 2], K[1, 0]], dtype=np.float64)
     return (theta / (2.0 * np.sin(theta))) * vee
 
 
@@ -346,9 +346,9 @@ def _left_jacobian_so3(phi: Array) -> Array:
     -------
     J : ndarray, shape (3,3)
     """
-    phi = np.asarray(phi, dtype=float).reshape(3)
+    phi = np.asarray(phi, dtype=np.float64).reshape(3)
     theta = float(np.linalg.norm(phi))
-    I = np.eye(3, dtype=float)
+    I = np.eye(3, dtype=np.float64)
 
     if theta < 1e-12:
         # Series: J ≈ I + 1/2 [φ]×
@@ -383,9 +383,9 @@ def _left_jacobian_inv_so3(phi: Array) -> Array:
     -------
     Jinv : ndarray, shape (3,3)
     """
-    phi = np.asarray(phi, dtype=float).reshape(3)
+    phi = np.asarray(phi, dtype=np.float64).reshape(3)
     theta = float(np.linalg.norm(phi))
-    I = np.eye(3, dtype=float)
+    I = np.eye(3, dtype=np.float64)
 
     if theta < 1e-7:
         # Use series expansion to avoid cancellation in 1 - cos(theta).
@@ -440,7 +440,7 @@ def exp_se3(xi: Array) -> Array:
     T : ndarray, shape (4,4)
         Homogeneous transform in SE(3).
     """
-    xi = np.asarray(xi, dtype=float).reshape(6)
+    xi = np.asarray(xi, dtype=np.float64).reshape(6)
     alpha = xi[:3]
     eps = xi[3:]
 
@@ -448,7 +448,7 @@ def exp_se3(xi: Array) -> Array:
     J = _left_jacobian_so3(alpha)
     p = J @ eps
 
-    T = np.eye(4, dtype=float)
+    T = np.eye(4, dtype=np.float64)
     T[:3, :3] = R
     T[:3, 3] = p
     return T
@@ -485,7 +485,7 @@ def log_se3(T: Array) -> Array:
     xi : ndarray, shape (6,)
         Twist vector [alpha; epsilon].
     """
-    T = np.asarray(T, dtype=float).reshape(4, 4)
+    T = np.asarray(T, dtype=np.float64).reshape(4, 4)
     R = T[:3, :3]
     p = T[:3, 3]
 
@@ -493,7 +493,7 @@ def log_se3(T: Array) -> Array:
     Jinv = _left_jacobian_inv_so3(alpha)
     eps = Jinv @ p
 
-    xi = np.zeros(6, dtype=float)
+    xi = np.zeros(6, dtype=np.float64)
     xi[:3] = alpha
     xi[3:] = eps
     return xi

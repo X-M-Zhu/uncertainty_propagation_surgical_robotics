@@ -30,12 +30,33 @@ where Ad_T is the SE(3) adjoint under CIS I twist ordering [alpha; epsilon].
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import numpy as np
 
 from .se3 import adjoint_se3, inv_se3, is_se3, skew
 from .nominal_types import vct3, Rot, Frame
 
 Array = np.ndarray
+
+
+class Convention(str, Enum):
+    """Perturbation convention for an uncertain transform's covariance.
+
+    RIGHT (body-frame, CIS I default):
+        T_true = F_nom @ Exp(eta)      eta ~ N(0, C)
+
+    LEFT (world-frame):
+        T_true = Exp(eta) @ F_nom      eta ~ N(0, C)
+
+    Bridge:
+        C_left  = Ad(F_nom)     @ C_right @ Ad(F_nom)^T
+        C_right = Ad(F_nom^-1)  @ C_left  @ Ad(F_nom^-1)^T
+
+    Use .to_right_perturbation() / .to_left_perturbation() to convert.
+    Use .convention to query which one you have.
+    """
+    RIGHT = "right"
+    LEFT  = "left"
 
 
 @dataclass(frozen=True)
@@ -61,6 +82,7 @@ class UncertainTransform:
     """
     F_nom: Array
     C: Array
+    convention: Convention = Convention.RIGHT
 
     @staticmethod
     def identity(C: Array | None = None) -> "UncertainTransform":
@@ -83,8 +105,8 @@ class UncertainTransform:
             Identity uncertain transform.
         """
         if C is None:
-            C = np.zeros((6, 6), dtype=float)
-        return UncertainTransform(np.eye(4, dtype=float), C)
+            C = np.zeros((6, 6), dtype=np.float64)
+        return UncertainTransform(np.eye(4, dtype=np.float64), C)
 
     @classmethod
     def from_frame(cls, frame: Frame, C: np.ndarray | None = None) -> "UncertainTransform":
@@ -102,11 +124,11 @@ class UncertainTransform:
         -------
         UncertainTransform
         """
-        F = np.eye(4, dtype=float)
+        F = np.eye(4, dtype=np.float64)
         F[:3, :3] = frame.R.matrix
         F[:3, 3] = np.array([frame.p.x, frame.p.y, frame.p.z])
         if C is None:
-            C = np.zeros((6, 6), dtype=float)
+            C = np.zeros((6, 6), dtype=np.float64)
         return cls(F, C)
 
     def to_frame(self) -> Frame:
@@ -144,6 +166,11 @@ class UncertainTransform:
         UncertainTransform
             Inverse uncertain transform.
         """
+        if self.convention != Convention.RIGHT:
+            raise ValueError(
+                "inv() requires right-convention covariance. "
+                "Call .to_right_perturbation() first."
+            )
         F_inv = inv_se3(self.F_nom)
         Ad_F = adjoint_se3(self.F_nom)
         C_inv = Ad_F @ self.C @ Ad_F.T
@@ -178,6 +205,16 @@ class UncertainTransform:
         UncertainTransform
             Composed uncertain transform.
         """
+        if self.convention != Convention.RIGHT:
+            raise ValueError(
+                "compose() requires right-convention covariance on self. "
+                "Call .to_right_perturbation() first."
+            )
+        if other.convention != Convention.RIGHT:
+            raise ValueError(
+                "compose() requires right-convention covariance on other. "
+                "Call other.to_right_perturbation() first."
+            )
         F_ab = self.F_nom
         F_bc = other.F_nom
         F_ac = F_ab @ F_bc
@@ -229,49 +266,47 @@ class UncertainTransform:
         UncertainTransform
             Same nominal transform, covariance converted to right-perturbation.
         """
-        F_nom  = np.asarray(F_nom,  dtype=float)
-        C_left = np.asarray(C_left, dtype=float)
+        F_nom  = np.asarray(F_nom,  dtype=np.float64)
+        C_left = np.asarray(C_left, dtype=np.float64)
         Ad_inv = adjoint_se3(inv_se3(F_nom))
         C_right = Ad_inv @ C_left @ Ad_inv.T
         return cls(F_nom, C_right)
 
     def to_right_perturbation(self) -> "UncertainTransform":
         r"""
-        Return this transform — covariance is already in right-perturbation convention.
+        Return this transform with covariance in right-perturbation convention.
 
-        Right model:  T_true = F_nom * Exp(eta_R)
-
-        Since this class natively uses right perturbation, this is a no-op.
+        If already RIGHT: no-op.
+        If LEFT: converts C_left → C_right via Ad(F^{-1}).
 
         Returns
         -------
         UncertainTransform
-            Same uncertain transform (no-op).
+            convention == Convention.RIGHT
         """
-        return UncertainTransform(self.F_nom, self.C.copy())
+        if self.convention == Convention.RIGHT:
+            return UncertainTransform(self.F_nom, self.C.copy(), Convention.RIGHT)
+        Ad_inv = adjoint_se3(inv_se3(self.F_nom))
+        C_right = Ad_inv @ self.C @ Ad_inv.T
+        return UncertainTransform(self.F_nom, 0.5 * (C_right + C_right.T), Convention.RIGHT)
 
     def to_left_perturbation(self) -> "UncertainTransform":
         r"""
-        Convert this right-perturbation covariance to its left-perturbation equivalent.
+        Return this transform with covariance in left-perturbation convention.
 
-        This library uses right-perturbation (body-frame) as the default:
-            T_true = F_nom * Exp(eta_R)        (right / body-frame convention)
-
-        The equivalent left-perturbation (world-frame) covariance satisfies:
-            T_true = Exp(eta_L) * F_nom        (left / world-frame convention)
-
-        Relationship:
-            eta_L = Ad_{F_nom} * eta_R
-            =>  C_left = Ad_{F_nom} * C_right * Ad_{F_nom}^T
+        If already LEFT: no-op.
+        If RIGHT: converts C_right → C_left via Ad(F_nom).
 
         Returns
         -------
         UncertainTransform
-            Same nominal transform, covariance expressed in left-perturbation convention.
+            convention == Convention.LEFT
         """
+        if self.convention == Convention.LEFT:
+            return UncertainTransform(self.F_nom, self.C.copy(), Convention.LEFT)
         Ad = adjoint_se3(self.F_nom)
         C_left = Ad @ self.C @ Ad.T
-        return UncertainTransform(self.F_nom, C_left)
+        return UncertainTransform(self.F_nom, 0.5 * (C_left + C_left.T), Convention.LEFT)
 
     def transform_point(self, p: Array, Cp: Array | None = None) -> tuple[Array, Array]:
         r"""
@@ -317,9 +352,9 @@ class UncertainTransform:
         """
         return_point = isinstance(p, vct3)
         if return_point:
-            p_arr = np.array([p.x, p.y, p.z], dtype=float)
+            p_arr = np.array([p.x, p.y, p.z], dtype=np.float64)
         else:
-            p_arr = np.asarray(p, dtype=float).reshape(3)
+            p_arr = np.asarray(p, dtype=np.float64).reshape(3)
 
         R = self.F_nom[:3, :3]
         t = self.F_nom[:3, 3]
@@ -329,7 +364,7 @@ class UncertainTransform:
 
         # CIS I Jacobian w.r.t. pose perturbation eta = [alpha; epsilon]
         # Right convention: d p' / d eta = [-R skew(p_in), R]
-        J_eta = np.zeros((3, 6), dtype=float)
+        J_eta = np.zeros((3, 6), dtype=np.float64)
         J_eta[:, :3] = -R @ skew(p_arr)     # d p' / d alpha (input point)
         J_eta[:, 3:] = R                    # d p' / d epsilon
 
@@ -338,7 +373,7 @@ class UncertainTransform:
         if Cp is None:
             Cp_out = Cp_pose
         else:
-            Cp = np.asarray(Cp, dtype=float).reshape(3, 3)
+            Cp = np.asarray(Cp, dtype=np.float64).reshape(3, 3)
             Cp_point = R @ Cp @ R.T
             Cp_out = Cp_pose + Cp_point
 
@@ -350,8 +385,8 @@ class UncertainTransform:
         return p_nom, Cp_out
 
     def __post_init__(self) -> None:
-        F = np.asarray(self.F_nom, dtype=float)
-        C = np.asarray(self.C, dtype=float)
+        F = np.asarray(self.F_nom, dtype=np.float64)
+        C = np.asarray(self.C, dtype=np.float64)
 
         if F.shape != (4, 4):
             raise ValueError(f"F_nom must be shape (4,4), got {F.shape}")

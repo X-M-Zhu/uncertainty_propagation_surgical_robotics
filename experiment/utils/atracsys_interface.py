@@ -182,9 +182,9 @@ class AtracsysTracker:
 
         # Convert cisst vctFrm3 → 4×4 numpy array
         frm3 = pose.Position()
-        T = np.eye(4, dtype=float)
-        T[:3, :3] = np.array(frm3.Rotation(),    dtype=float)
-        T[:3,  3] = np.array(frm3.Translation(), dtype=float) * 1e-3  # mm → m
+        T = np.eye(4, dtype=np.float64)
+        T[:3, :3] = np.array(frm3.Rotation(),    dtype=np.float64)
+        T[:3,  3] = np.array(frm3.Translation(), dtype=np.float64) * 1e-3  # mm → m
         return T
 
     def collect_samples(self, body_name: str, n: int = 200,

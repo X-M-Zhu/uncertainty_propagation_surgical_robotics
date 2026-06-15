@@ -151,14 +151,14 @@ class LoopObservation(Observation):
         key_k: str,
         C_nu: Optional[Array] = None,
     ) -> None:
-        self._F_res = np.asarray(F_res, dtype=float)
-        self._F_k   = np.asarray(F_k,   dtype=float)
+        self._F_res = np.asarray(F_res, dtype=np.float64)
+        self._F_k   = np.asarray(F_k,   dtype=np.float64)
         self._key_res = key_res
         self._key_k   = key_k
         self._C_nu = (
-            1e-9 * np.eye(6, dtype=float)
+            1e-9 * np.eye(6, dtype=np.float64)
             if C_nu is None
-            else np.asarray(C_nu, dtype=float).reshape(6, 6)
+            else np.asarray(C_nu, dtype=np.float64).reshape(6, 6)
         )
         # Precompute linearization once
         self._lin: LoopLinearization = linearize_loop_residual(self._F_res, self._F_k)
@@ -229,11 +229,11 @@ class PointObservation(Observation):
         z: Array,
         C_nu: Array,
     ) -> None:
-        self._p_nom = np.asarray(p_nom, dtype=float).reshape(3)
-        self._J_eta = np.asarray(J_eta, dtype=float).reshape(3, 6)
+        self._p_nom = np.asarray(p_nom, dtype=np.float64).reshape(3)
+        self._J_eta = np.asarray(J_eta, dtype=np.float64).reshape(3, 6)
         self._key   = key
-        self._z     = np.asarray(z, dtype=float).reshape(3)
-        self._C_nu  = np.asarray(C_nu, dtype=float).reshape(3, 3)
+        self._z     = np.asarray(z, dtype=np.float64).reshape(3)
+        self._C_nu  = np.asarray(C_nu, dtype=np.float64).reshape(3, 3)
 
     @classmethod
     def build(
@@ -267,9 +267,9 @@ class PointObservation(Observation):
         F_nom : (4,4) ndarray, optional
             Nominal SE(3) transform used to compute the right-convention Jacobian.
         """
-        p = np.asarray(p_nom, dtype=float).reshape(3)
+        p = np.asarray(p_nom, dtype=np.float64).reshape(3)
         if F_nom is not None:
-            F = np.asarray(F_nom, dtype=float).reshape(4, 4)
+            F = np.asarray(F_nom, dtype=np.float64).reshape(4, 4)
             R = F[:3, :3]
             t = F[:3, 3]
             p_in = R.T @ (p - t)
@@ -345,14 +345,14 @@ class DistanceObservation(Observation):
         z: float,
         sigma: float,
     ) -> None:
-        self._p1 = np.asarray(p1_nom, dtype=float).reshape(3)
-        self._p2 = np.asarray(p2_nom, dtype=float).reshape(3)
-        self._J1 = np.asarray(J_eta_1, dtype=float).reshape(3, 6)
-        self._J2 = np.asarray(J_eta_2, dtype=float).reshape(3, 6)
+        self._p1 = np.asarray(p1_nom, dtype=np.float64).reshape(3)
+        self._p2 = np.asarray(p2_nom, dtype=np.float64).reshape(3)
+        self._J1 = np.asarray(J_eta_1, dtype=np.float64).reshape(3, 6)
+        self._J2 = np.asarray(J_eta_2, dtype=np.float64).reshape(3, 6)
         self._key_1 = key_1
         self._key_2 = key_2
         self._z     = float(z)
-        self._C_nu  = np.array([[sigma ** 2]], dtype=float)
+        self._C_nu  = np.array([[sigma ** 2]], dtype=np.float64)
 
     @classmethod
     def build(
@@ -376,11 +376,11 @@ class DistanceObservation(Observation):
         If F_nom_i is None (identity approximation):
             J_eta_i = [-[p_i]x | I_3]              shape (3, 6)
         """
-        p1 = np.asarray(p1_nom, dtype=float).reshape(3)
-        p2 = np.asarray(p2_nom, dtype=float).reshape(3)
+        p1 = np.asarray(p1_nom, dtype=np.float64).reshape(3)
+        p2 = np.asarray(p2_nom, dtype=np.float64).reshape(3)
 
         if F_nom_1 is not None:
-            F1 = np.asarray(F_nom_1, dtype=float).reshape(4, 4)
+            F1 = np.asarray(F_nom_1, dtype=np.float64).reshape(4, 4)
             R1, t1 = F1[:3, :3], F1[:3, 3]
             p1_in = R1.T @ (p1 - t1)
             J1 = np.hstack([-R1 @ skew(p1_in), R1])
@@ -388,7 +388,7 @@ class DistanceObservation(Observation):
             J1 = np.hstack([-skew(p1), np.eye(3)])
 
         if F_nom_2 is not None:
-            F2 = np.asarray(F_nom_2, dtype=float).reshape(4, 4)
+            F2 = np.asarray(F_nom_2, dtype=np.float64).reshape(4, 4)
             R2, t2 = F2[:3, :3], F2[:3, 3]
             p2_in = R2.T @ (p2 - t2)
             J2 = np.hstack([-R2 @ skew(p2_in), R2])
@@ -534,18 +534,18 @@ def condition_on_observations(
     dim = 6 * K
 
     # --- Build block-diagonal prior C0 ---
-    C0 = np.zeros((dim, dim), dtype=float)
+    C0 = np.zeros((dim, dim), dtype=np.float64)
     for i, key in enumerate(keys):
-        C = np.asarray(priors[key], dtype=float).reshape(6, 6)
+        C = np.asarray(priors[key], dtype=np.float64).reshape(6, 6)
         _assert_positive_definite(C, f"prior['{key}']")
         s = 6 * i
         C0[s : s + 6, s : s + 6] = C
 
     # --- Stack observation Jacobians, residuals, and noise ---
     m_total = sum(obs.dim for obs in observations)
-    H          = np.zeros((m_total, dim),       dtype=float)
-    C_nu_full  = np.zeros((m_total, m_total),   dtype=float)
-    r0_stacked = np.zeros(m_total,              dtype=float)
+    H          = np.zeros((m_total, dim),       dtype=np.float64)
+    C_nu_full  = np.zeros((m_total, m_total),   dtype=np.float64)
+    r0_stacked = np.zeros(m_total,              dtype=np.float64)
 
     row = 0
     for obs in observations:
@@ -562,7 +562,7 @@ def condition_on_observations(
                     f"Available keys: {keys}"
                 )
             col = key_to_col[key]
-            H[row : row + m, col : col + J.shape[1]] += np.asarray(J, dtype=float)
+            H[row : row + m, col : col + J.shape[1]] += np.asarray(J, dtype=np.float64)
         row += m
 
     # --- Information filter update ---

@@ -169,15 +169,15 @@ def linearize_loop_residual(
     -------
     LoopLinearization with r0, J_res, J_k.
     """
-    eta0 = np.zeros(6, dtype=float)
+    eta0 = np.zeros(6, dtype=np.float64)
     r0 = loop_residual(F_res, F_k, eta0, eta0)
 
-    J_res = np.zeros((6, 6), dtype=float)
-    J_k = np.zeros((6, 6), dtype=float)
+    J_res = np.zeros((6, 6), dtype=np.float64)
+    J_k = np.zeros((6, 6), dtype=np.float64)
 
     # FD w.r.t eta_res
     for i in range(6):
-        d = np.zeros(6, dtype=float)
+        d = np.zeros(6, dtype=np.float64)
         d[i] = eps
         rp = loop_residual(F_res, F_k, d, eta0)
         rm = loop_residual(F_res, F_k, -d, eta0)
@@ -185,7 +185,7 @@ def linearize_loop_residual(
 
     # FD w.r.t eta_k
     for i in range(6):
-        d = np.zeros(6, dtype=float)
+        d = np.zeros(6, dtype=np.float64)
         d[i] = eps
         rp = loop_residual(F_res, F_k, eta0, d)
         rm = loop_residual(F_res, F_k, eta0, -d)
@@ -234,25 +234,25 @@ def condition_on_loop(
     -------
     LoopPosterior with posterior covariance blocks and full covariance.
     """
-    C_res = np.asarray(C_res, dtype=float).reshape(6, 6)
-    C_k = np.asarray(C_k, dtype=float).reshape(6, 6)
+    C_res = np.asarray(C_res, dtype=np.float64).reshape(6, 6)
+    C_k = np.asarray(C_k, dtype=np.float64).reshape(6, 6)
 
     if C_nu is None:
-        C_nu = 1e-9 * np.eye(6, dtype=float)
+        C_nu = 1e-9 * np.eye(6, dtype=np.float64)
     else:
-        C_nu = np.asarray(C_nu, dtype=float).reshape(6, 6)
+        C_nu = np.asarray(C_nu, dtype=np.float64).reshape(6, 6)
 
     _assert_positive_definite(C_res, "C_res")
     _assert_positive_definite(C_k, "C_k")
     _assert_positive_definite(C_nu, "C_nu")
 
     # Prior covariance (independent blocks)
-    C0 = np.zeros((12, 12), dtype=float)
+    C0 = np.zeros((12, 12), dtype=np.float64)
     C0[:6, :6] = C_res
     C0[6:, 6:] = C_k
 
     # Observation Jacobian H = [J_res J_k]
-    H = np.zeros((6, 12), dtype=float)
+    H = np.zeros((6, 12), dtype=np.float64)
     H[:, :6] = lin.J_res
     H[:, 6:] = lin.J_k
 
@@ -279,7 +279,7 @@ def select_subspace(indices: list[int]) -> Array:
         rotation-only alpha: indices=[0,1,2]
         translation-only epsilon: indices=[3,4,5]
     """
-    S = np.zeros((len(indices), 6), dtype=float)
+    S = np.zeros((len(indices), 6), dtype=np.float64)
     for r, c in enumerate(indices):
         S[r, c] = 1.0
     return S
@@ -305,23 +305,23 @@ def condition_on_loop_subspace(
     S = select_subspace(indices)
 
     if C_nu_sub is None:
-        C_nu_sub = 1e-9 * np.eye(S.shape[0], dtype=float)
+        C_nu_sub = 1e-9 * np.eye(S.shape[0], dtype=np.float64)
     else:
-        C_nu_sub = np.asarray(C_nu_sub, dtype=float).reshape(S.shape[0], S.shape[0])
+        C_nu_sub = np.asarray(C_nu_sub, dtype=np.float64).reshape(S.shape[0], S.shape[0])
 
     # Build reduced H and perform information update in the same way
-    C_res = np.asarray(C_res, dtype=float).reshape(6, 6)
-    C_k = np.asarray(C_k, dtype=float).reshape(6, 6)
+    C_res = np.asarray(C_res, dtype=np.float64).reshape(6, 6)
+    C_k = np.asarray(C_k, dtype=np.float64).reshape(6, 6)
 
     _assert_positive_definite(C_res, "C_res")
     _assert_positive_definite(C_k, "C_k")
     _assert_positive_definite(C_nu_sub, "C_nu_sub")
 
-    C0 = np.zeros((12, 12), dtype=float)
+    C0 = np.zeros((12, 12), dtype=np.float64)
     C0[:6, :6] = C_res
     C0[6:, 6:] = C_k
 
-    H_full = np.zeros((6, 12), dtype=float)
+    H_full = np.zeros((6, 12), dtype=np.float64)
     H_full[:, :6] = lin.J_res
     H_full[:, 6:] = lin.J_k
 
@@ -369,12 +369,12 @@ def fuse_gaussians(
         raise ValueError("means and covs must be non-empty lists of equal length.")
 
     d = len(means[0])
-    I_total = np.zeros((d, d), dtype=float)
-    h_total = np.zeros(d, dtype=float)
+    I_total = np.zeros((d, d), dtype=np.float64)
+    h_total = np.zeros(d, dtype=np.float64)
 
     for k, (mu, C) in enumerate(zip(means, covs)):
-        C = np.asarray(C, dtype=float)
-        mu = np.asarray(mu, dtype=float)
+        C = np.asarray(C, dtype=np.float64)
+        mu = np.asarray(mu, dtype=np.float64)
         _assert_positive_definite(C, f"covs[{k}]")
         C_inv = np.linalg.inv(_sym(C))
         I_total += C_inv
@@ -405,7 +405,7 @@ def fuse_gaussian_covs(covs: List[Array]) -> Array:
         raise ValueError("covs must be a non-empty list.")
 
     d = covs[0].shape[0]
-    zeros = [np.zeros(d, dtype=float)] * len(covs)
+    zeros = [np.zeros(d, dtype=np.float64)] * len(covs)
     _, C_fused = fuse_gaussians(zeros, covs)
     return C_fused
 
@@ -480,26 +480,26 @@ def condition_on_multiple_loops(
         raise ValueError("lin_list and C_k_list must have the same length.")
 
     if C_nu_list is None:
-        C_nu_list = [1e-9 * np.eye(6, dtype=float)] * N
+        C_nu_list = [1e-9 * np.eye(6, dtype=np.float64)] * N
     elif len(C_nu_list) != N:
         raise ValueError("C_nu_list must have the same length as C_k_list.")
 
-    C_res = np.asarray(C_res, dtype=float).reshape(6, 6)
+    C_res = np.asarray(C_res, dtype=np.float64).reshape(6, 6)
     _assert_positive_definite(C_res, "C_res")
 
     dim = 6 * (1 + N)  # full state dimension
 
     # Build block-diagonal prior C0
-    C0 = np.zeros((dim, dim), dtype=float)
+    C0 = np.zeros((dim, dim), dtype=np.float64)
     C0[:6, :6] = C_res
     for i, C_k in enumerate(C_k_list):
-        C_k = np.asarray(C_k, dtype=float).reshape(6, 6)
+        C_k = np.asarray(C_k, dtype=np.float64).reshape(6, 6)
         _assert_positive_definite(C_k, f"C_k_list[{i}]")
         s = 6 + 6 * i
         C0[s:s+6, s:s+6] = C_k
 
     # Build stacked observation Jacobian H  (6N × dim)
-    H = np.zeros((6 * N, dim), dtype=float)
+    H = np.zeros((6 * N, dim), dtype=np.float64)
     for i, lin in enumerate(lin_list):
         row = 6 * i
         H[row:row+6, :6] = lin.J_res          # eta_res block
@@ -507,9 +507,9 @@ def condition_on_multiple_loops(
         H[row:row+6, s:s+6] = lin.J_k         # eta_k_i block
 
     # Build block-diagonal observation noise C_nu  (6N × 6N)
-    C_nu_full = np.zeros((6 * N, 6 * N), dtype=float)
+    C_nu_full = np.zeros((6 * N, 6 * N), dtype=np.float64)
     for i, C_nu in enumerate(C_nu_list):
-        C_nu = np.asarray(C_nu, dtype=float).reshape(6, 6)
+        C_nu = np.asarray(C_nu, dtype=np.float64).reshape(6, 6)
         _assert_positive_definite(C_nu, f"C_nu_list[{i}]")
         row = 6 * i
         C_nu_full[row:row+6, row:row+6] = C_nu

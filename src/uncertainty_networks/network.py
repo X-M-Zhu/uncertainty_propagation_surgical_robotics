@@ -164,7 +164,7 @@ _VALID_EDGE_TYPES = frozenset({"se3", "rot_only", "trans_only", "vector"})
 
 def _project_covariance(C: Array, edge_type: str) -> Array:
     """Zero out covariance blocks that are inactive for the given edge type."""
-    C = np.array(C, dtype=float)
+    C = np.array(C, dtype=np.float64)
     if edge_type == "rot_only":
         C[3:, :] = 0.0
         C[:, 3:] = 0.0
@@ -248,7 +248,7 @@ class GeometricNetwork:
 
         F_nom = T_src_dst.F_nom
         if edge_type == "vector":
-            F_nom = np.array(F_nom, dtype=float)
+            F_nom = np.array(F_nom, dtype=np.float64)
             F_nom[:3, :3] = np.eye(3)
 
         T_fwd = UncertainTransform(F_nom, C_proj)
@@ -287,8 +287,8 @@ class GeometricNetwork:
             raise KeyError(f"Unknown frame '{frame}'")
         self._points[name] = PointNode(
             frame=frame,
-            p_local=np.asarray(p_local, dtype=float).reshape(3),
-            Cp=np.asarray(Cp, dtype=float).reshape(3, 3),
+            p_local=np.asarray(p_local, dtype=np.float64).reshape(3),
+            Cp=np.asarray(Cp, dtype=np.float64).reshape(3, 3),
         )
 
     def has_point(self, name: str) -> bool:
@@ -536,7 +536,7 @@ class GeometricNetwork:
         m = len(edges)
 
         # Backward pass: T_suffixes[k] = F_{k+1} @ ... @ F_{m-1}
-        T_suffix = np.eye(4, dtype=float)
+        T_suffix = np.eye(4, dtype=np.float64)
         T_suffixes: List[Array] = [None] * m  # type: ignore[list-item]
         for k in range(m - 1, -1, -1):
             T_suffixes[k] = T_suffix.copy()
@@ -648,11 +648,11 @@ class GeometricNetwork:
         #
         # For the diagonal (i == ℓ) this equals the per-path composed covariance.
         # For off-diagonal blocks it captures shared-edge correlations.
-        S = np.zeros((6 * m, 6 * m), dtype=float)
+        S = np.zeros((6 * m, 6 * m), dtype=np.float64)
 
         for i in range(m):
             for l in range(m):
-                S_il = np.zeros((6, 6), dtype=float)
+                S_il = np.zeros((6, 6), dtype=np.float64)
                 shared_eids = (
                     set(canonical_terms[i].keys()) & set(canonical_terms[l].keys())
                 )
@@ -671,7 +671,7 @@ class GeometricNetwork:
         except np.linalg.LinAlgError:
             S_inv = np.linalg.pinv(S)
 
-        info = np.zeros((6, 6), dtype=float)
+        info = np.zeros((6, 6), dtype=np.float64)
         for i in range(m):
             for l in range(m):
                 info += S_inv[6 * i : 6 * i + 6, 6 * l : 6 * l + 6]
@@ -735,7 +735,7 @@ class GeometricNetwork:
         m = len(edges)
 
         # Backward pass: T_suffixes[k] = F_{k+1} @ ... @ F_{m-1}
-        T_suffix = np.eye(4, dtype=float)
+        T_suffix = np.eye(4, dtype=np.float64)
         T_suffixes: List[Array] = [None] * m  # type: ignore[list-item]
         for k in range(m - 1, -1, -1):
             T_suffixes[k] = T_suffix.copy()
@@ -753,9 +753,9 @@ class GeometricNetwork:
         # where R_01k  = rotation of F_0 @ ... @ F_k
         #       p_suf_k = T_suffix_k @ p_in (point expressed after edge k)
         edge_terms: Dict[str, Tuple[Array, Array]] = {}
-        Cp_edges = np.zeros((3, 3), dtype=float)
+        Cp_edges = np.zeros((3, 3), dtype=np.float64)
 
-        R_prefix = np.eye(3, dtype=float)  # rotation before edge k
+        R_prefix = np.eye(3, dtype=np.float64)  # rotation before edge k
         p_in = point.p_local
 
         for k, e in enumerate(edges):
@@ -765,7 +765,7 @@ class GeometricNetwork:
             T_suf = T_suffixes[k]
             p_suf_k = T_suf[:3, :3] @ p_in + T_suf[:3, 3]
 
-            J_e = R_01k @ np.hstack([-skew(p_suf_k), np.eye(3, dtype=float)])
+            J_e = R_01k @ np.hstack([-skew(p_suf_k), np.eye(3, dtype=np.float64)])
             C_e = e.transform.C
             Cp_edges += J_e @ C_e @ J_e.T
             edge_terms[e.edge_id] = (J_e, C_e)
@@ -865,7 +865,7 @@ class GeometricNetwork:
         delta = p_dst - p_src
 
         # Cross-covariance from shared physical edges (same edge_id).
-        cross = np.zeros((3, 3), dtype=float)
+        cross = np.zeros((3, 3), dtype=np.float64)
         shared_eids = set(terms_src.keys()) & set(terms_dst.keys())
         for eid in shared_eids:
             J_src, C_e = terms_src[eid]

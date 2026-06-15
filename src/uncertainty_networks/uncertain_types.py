@@ -10,13 +10,13 @@ but carries covariance. All heavy math delegates to UncertainTransform.
 API (following Dr. Taylor's CIS I specification):
 
     uVector(v, cov)         uncertain vector, any dimension
-    uPoint(p, cov)          uncertain 3-D point
+    uvct3(p, cov)          uncertain 3-D point
     uRot(R, cov)            uncertain rotation
     uFrame(F, cov)          uncertain rigid frame
 
 Supported operations::
 
-    # uPoint
+    # uvct3
     up3 = up1 + up2
     up3 = p1  + up2
 
@@ -43,7 +43,7 @@ Supported operations::
 
     # uRot from uncertain angle or axis
     uR = uRot(axis_str, uAngle)     uAngle is a uVector of dim 1
-    uR = uRot(uAxis,    angle)      uAxis  is a uVector or uPoint
+    uR = uRot(uAxis,    angle)      uAxis  is a uVector or uvct3
     uR = uRot(uAxis,    uAngle)     both uncertain
 """
 
@@ -53,7 +53,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as _ScipyRot
 
 from .nominal_types import vct3, Rot, Frame
-from .uncertain_geometry import UncertainTransform
+from .uncertain_geometry import UncertainTransform, Convention
 from .se3 import skew
 
 
@@ -82,32 +82,32 @@ class uVector:
     """
 
     def __init__(self, v, C=None):
-        self.v = np.asarray(v, dtype=float).ravel()
+        self.v = np.asarray(v, dtype=np.float64).ravel()
         n = len(self.v)
-        self.C = np.zeros((n, n), dtype=float) if C is None else np.asarray(C, dtype=float)
+        self.C = np.zeros((n, n), dtype=np.float64) if C is None else np.asarray(C, dtype=np.float64)
 
     def __repr__(self):
         return f"uVector(v={self.v}, C_diag={np.diag(self.C)})"
 
 
-# ── uPoint ────────────────────────────────────────────────────────────────────
+# ── uvct3 ────────────────────────────────────────────────────────────────────
 
-class uPoint:
+class uvct3:
     """
     Uncertain 3-D point.
 
-        up = uPoint(p)              vct3, zero covariance
-        up = uPoint(p, cov)         vct3 + 3×3 covariance
-        up = uPoint([x,y,z], cov)   array-like also accepted
+        up = uvct3(p)              vct3, zero covariance
+        up = uvct3(p, cov)         vct3 + 3×3 covariance
+        up = uvct3([x,y,z], cov)   array-like also accepted
     """
 
     def __init__(self, p, C=None):
         if isinstance(p, vct3):
             self._p = p
         else:
-            arr = np.asarray(p, dtype=float).ravel()
+            arr = np.asarray(p, dtype=np.float64).ravel()
             self._p = vct3(arr[0], arr[1], arr[2])
-        self.C = np.zeros((3, 3), dtype=float) if C is None else np.asarray(C, dtype=float)
+        self.C = np.zeros((3, 3), dtype=np.float64) if C is None else np.asarray(C, dtype=np.float64)
 
     # ── properties ──
     @property
@@ -128,19 +128,19 @@ class uPoint:
 
     # ── addition ──
     def __add__(self, other):
-        if isinstance(other, uPoint):
-            return uPoint(self._p + other._p, self.C + other.C)
+        if isinstance(other, uvct3):
+            return uvct3(self._p + other._p, self.C + other.C)
         if isinstance(other, vct3):
-            return uPoint(self._p + other, self.C.copy())
+            return uvct3(self._p + other, self.C.copy())
         return NotImplemented
 
     def __radd__(self, other):
         if isinstance(other, vct3):
-            return uPoint(other + self._p, self.C.copy())
+            return uvct3(other + self._p, self.C.copy())
         return NotImplemented
 
     def __repr__(self):
-        return (f"uPoint(p=({self.x:.4f}, {self.y:.4f}, {self.z:.4f}), "
+        return (f"uvct3(p=({self.x:.4f}, {self.y:.4f}, {self.z:.4f}), "
                 f"C_diag={np.diag(self.C)})")
 
 
@@ -155,15 +155,15 @@ class uRot:
         uR = uRot(R)                        Rot, zero covariance
         uR = uRot(R, Calpha)                Rot + 3×3 rotation covariance
         uR = uRot(axis_str, uAngle)         axis='x'/'y'/'z', uncertain angle
-        uR = uRot(uAxis, angle)             uncertain axis (uVector/uPoint), certain angle
+        uR = uRot(uAxis, angle)             uncertain axis (uVector/uvct3), certain angle
         uR = uRot(uAxis, uAngle)            both uncertain
     """
 
     def __init__(self, first, second=None):
         if isinstance(first, Rot):
             self._R = first
-            self.C = np.zeros((3, 3), dtype=float) if second is None \
-                else np.asarray(second, dtype=float)
+            self.C = np.zeros((3, 3), dtype=np.float64) if second is None \
+                else np.asarray(second, dtype=np.float64)
 
         elif isinstance(first, str):
             # uRot('z', uAngle)  or  uRot('z', angle_float)
@@ -174,11 +174,11 @@ class uRot:
                 self.C = np.outer(ax, ax) * float(second.C[0, 0])
             else:
                 self._R = Rot(axis=first, angle=float(second))
-                self.C = np.zeros((3, 3), dtype=float)
+                self.C = np.zeros((3, 3), dtype=np.float64)
 
-        elif isinstance(first, (uVector, uPoint)):
+        elif isinstance(first, (uVector, uvct3)):
             # uRot(uAxis, angle)  or  uRot(uAxis, uAngle)
-            if isinstance(first, uPoint):
+            if isinstance(first, uvct3):
                 ax_nom = np.array([first.x, first.y, first.z])
                 C_axis = first.C
             else:
@@ -204,8 +204,13 @@ class uRot:
                 f"uRot: cannot construct from ({type(first).__name__}, {type(second).__name__}). "
                 "Expected (Rot, cov?), ('axis', uAngle), or (uAxis, angle_or_uAngle)."
             )
+        self._convention = Convention.RIGHT
 
     # ── properties ──
+    @property
+    def convention(self) -> Convention:
+        return self._convention
+
     @property
     def R(self) -> Rot:
         return self._R
@@ -218,19 +223,19 @@ class uRot:
     def __mul__(self, other):
         R_mat = self._R.matrix
 
-        if isinstance(other, uPoint):
+        if isinstance(other, uvct3):
             p_arr = np.array([other.x, other.y, other.z])
             p_nom = R_mat @ p_arr
             J_alpha = -R_mat @ skew(p_arr)
             C_out = J_alpha @ self.C @ J_alpha.T + R_mat @ other.C @ R_mat.T
-            return uPoint(vct3(*p_nom), 0.5 * (C_out + C_out.T))
+            return uvct3(vct3(*p_nom), 0.5 * (C_out + C_out.T))
 
         if isinstance(other, vct3):
             p_arr = np.array([other.x, other.y, other.z])
             p_nom = R_mat @ p_arr
             J_alpha = -R_mat @ skew(p_arr)
             C_out = J_alpha @ self.C @ J_alpha.T
-            return uPoint(vct3(*p_nom), 0.5 * (C_out + C_out.T))
+            return uvct3(vct3(*p_nom), 0.5 * (C_out + C_out.T))
 
         if isinstance(other, uRot):
             R2 = other._R.matrix
@@ -267,23 +272,38 @@ class uRot:
             => C_left  = R_nom @ C_right @ R_nom^T
             => C_right = R_nom^T @ C_left @ R_nom
         """
-        C_left = np.asarray(C_left, dtype=float)
+        C_left = np.asarray(C_left, dtype=np.float64)
         R_mat = R.matrix
         C_right = R_mat.T @ C_left @ R_mat
         return cls(R, 0.5 * (C_right + C_right.T))
 
     def to_right_perturbation(self) -> "uRot":
-        """No-op — covariance is already in right (body-frame) convention."""
-        return uRot(self._R, self.C.copy())
+        """Return this rotation with covariance in right (body-frame) convention.
+
+        If already RIGHT: no-op.  If LEFT: converts C_left → C_right via R^T.
+        """
+        if self._convention == Convention.RIGHT:
+            result = uRot(self._R, self.C.copy())
+        else:
+            R_mat = self._R.matrix
+            C_right = R_mat.T @ self.C @ R_mat
+            result = uRot(self._R, 0.5 * (C_right + C_right.T))
+        result._convention = Convention.RIGHT
+        return result
 
     def to_left_perturbation(self) -> "uRot":
-        """Convert right-convention (body-frame) covariance to left-convention (world-frame).
+        """Return this rotation with covariance in left (world-frame) convention.
 
-        C_left = R_nom @ C_right @ R_nom^T
+        If already LEFT: no-op.  If RIGHT: converts C_right → C_left via R.
         """
-        R_mat = self._R.matrix
-        C_left = R_mat @ self.C @ R_mat.T
-        return uRot(self._R, 0.5 * (C_left + C_left.T))
+        if self._convention == Convention.LEFT:
+            result = uRot(self._R, self.C.copy())
+        else:
+            R_mat = self._R.matrix
+            C_left = R_mat @ self.C @ R_mat.T
+            result = uRot(self._R, 0.5 * (C_left + C_left.T))
+        result._convention = Convention.LEFT
+        return result
 
     def __repr__(self):
         return f"uRot(C_diag={np.diag(self.C)})"
@@ -317,48 +337,52 @@ class uFrame:
             self._ut = first
 
         elif isinstance(first, Frame):
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = first.R.matrix
             F_nom[:3, 3] = [first.p.x, first.p.y, first.p.z]
-            C = np.zeros((6, 6), dtype=float) if second is None \
-                else np.asarray(second, dtype=float)
+            C = np.zeros((6, 6), dtype=np.float64) if second is None \
+                else np.asarray(second, dtype=np.float64)
             self._ut = UncertainTransform(F_nom, C)
 
-        elif isinstance(first, uRot) and isinstance(second, uPoint):
+        elif isinstance(first, uRot) and isinstance(second, uvct3):
             # uFrame(uR, up)
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = first.R.matrix
             F_nom[:3, 3] = [second.x, second.y, second.z]
-            C = np.zeros((6, 6), dtype=float)
+            C = np.zeros((6, 6), dtype=np.float64)
             C[:3, :3] = first.C   # rotation covariance  (alpha)
             C[3:, 3:] = second.C  # translation covariance (epsilon)
             self._ut = UncertainTransform(F_nom, C)
 
-        elif isinstance(first, Rot) and isinstance(second, uPoint):
+        elif isinstance(first, Rot) and isinstance(second, uvct3):
             # uFrame(R, up)
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = first.matrix
             F_nom[:3, 3] = [second.x, second.y, second.z]
-            C = np.zeros((6, 6), dtype=float)
+            C = np.zeros((6, 6), dtype=np.float64)
             C[3:, 3:] = second.C
             self._ut = UncertainTransform(F_nom, C)
 
         elif isinstance(first, uRot) and isinstance(second, vct3):
             # uFrame(uR, p)
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = first.R.matrix
             F_nom[:3, 3] = [second.x, second.y, second.z]
-            C = np.zeros((6, 6), dtype=float)
+            C = np.zeros((6, 6), dtype=np.float64)
             C[:3, :3] = first.C
             self._ut = UncertainTransform(F_nom, C)
 
         else:
             raise TypeError(
                 f"uFrame: unsupported arguments ({type(first).__name__}, {type(second).__name__}). "
-                "Expected (Frame, cov?), (uRot, uPoint), (Rot, uPoint), or (uRot, vct3)."
+                "Expected (Frame, cov?), (uRot, uvct3), (Rot, uvct3), or (uRot, vct3)."
             )
 
     # ── properties ──
+    @property
+    def convention(self) -> Convention:
+        return self._ut.convention
+
     @property
     def F(self) -> Frame:
         return self._ut.to_frame()
@@ -391,11 +415,11 @@ class uFrame:
         Accepts either a Frame object or a raw 4×4 numpy array as the nominal transform.
         """
         if isinstance(frame_or_F_nom, Frame):
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = frame_or_F_nom.R.matrix
             F_nom[:3, 3] = [frame_or_F_nom.p.x, frame_or_F_nom.p.y, frame_or_F_nom.p.z]
         else:
-            F_nom = np.asarray(frame_or_F_nom, dtype=float)
+            F_nom = np.asarray(frame_or_F_nom, dtype=np.float64)
         return cls(UncertainTransform.from_left_perturbation(F_nom, C_left))
 
     def to_right_perturbation(self) -> "uFrame":
@@ -415,34 +439,34 @@ class uFrame:
             return uFrame(self._ut.compose(other._ut))
 
         if isinstance(other, Frame):
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = other.R.matrix
             F_nom[:3, 3] = [other.p.x, other.p.y, other.p.z]
             return uFrame(self._ut.compose(UncertainTransform(F_nom, np.zeros((6, 6)))))
 
         if isinstance(other, Rot):
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = other.matrix
             return uFrame(self._ut.compose(UncertainTransform(F_nom, np.zeros((6, 6)))))
 
-        if isinstance(other, uPoint):
+        if isinstance(other, uvct3):
             p_out, C_out = self._ut.transform_point(other.p, Cp=other.C)
-            return uPoint(p_out, C_out)
+            return uvct3(p_out, C_out)
 
         if isinstance(other, vct3):
             p_out, C_out = self._ut.transform_point(other)
-            return uPoint(p_out, C_out)
+            return uvct3(p_out, C_out)
 
         return NotImplemented
 
     def __rmul__(self, other):
         if isinstance(other, Frame):
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = other.R.matrix
             F_nom[:3, 3] = [other.p.x, other.p.y, other.p.z]
             return uFrame(UncertainTransform(F_nom, np.zeros((6, 6))).compose(self._ut))
         if isinstance(other, Rot):
-            F_nom = np.eye(4, dtype=float)
+            F_nom = np.eye(4, dtype=np.float64)
             F_nom[:3, :3] = other.matrix
             return uFrame(UncertainTransform(F_nom, np.zeros((6, 6))).compose(self._ut))
         return NotImplemented
