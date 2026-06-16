@@ -1,6 +1,7 @@
 import numpy as np
 
 from uncertainty_networks import UncertainTransform, GeometricNetwork
+from uncertainty_networks import uvct3
 
 
 def test_find_path_and_query_composition_identity_edges():
@@ -70,10 +71,12 @@ def test_query_point_returns_point_and_covariance_in_target_frame():
     # Point attached to A
     pA = np.array([0.1, 0.0, 0.0])
     CpA = 1e-6 * np.eye(3)
-    net.add_point("p1", frame="A", p_local=pA, Cp=CpA)
+    net.add_point("p1", "A", uvct3(pA, CpA))
 
     # Query point in B
-    pB, CpB = net.query_point("p1", "B")
+    up = net.query_point("p1", "B")
+    pB  = np.array([up.x, up.y, up.z])
+    CpB = up.C
 
     assert pB.shape == (3,)
     assert CpB.shape == (3, 3)
@@ -95,10 +98,12 @@ def test_query_relative_vector_and_distance_runs():
     net.add_edge("A", "B", U_ab, add_inverse=True)
 
     # points
-    net.add_point("pA", "A", [0.1, 0.0, 0.0], 1e-6*np.eye(3))
-    net.add_point("pB", "B", [0.0, 0.1, 0.0], 1e-6*np.eye(3))
+    net.add_point("pA", "A", uvct3([0.1, 0.0, 0.0], 1e-6*np.eye(3)))
+    net.add_point("pB", "B", uvct3([0.0, 0.1, 0.0], 1e-6*np.eye(3)))
 
-    delta, C_delta = net.query_relative_vector("pA", "pB", "A")
+    result  = net.query_relative_vector("pA", "pB", "A")
+    delta   = np.array([result.x, result.y, result.z])
+    C_delta = result.C
     assert delta.shape == (3,)
     assert C_delta.shape == (3, 3)
     assert np.allclose(C_delta, C_delta.T)
@@ -122,11 +127,15 @@ def test_correlation_aware_relative_vector_reduces_cov_when_edges_shared():
     net.add_edge("A", "B", U_ab, add_inverse=True)
 
     # Two points attached to A; query both into B => both depend on SAME edge
-    net.add_point("p1", "A", [0.1, 0.0, 0.0], 1e-6 * np.eye(3))
-    net.add_point("p2", "A", [0.2, 0.0, 0.0], 1e-6 * np.eye(3))
+    net.add_point("p1", "A", uvct3([0.1, 0.0, 0.0], 1e-6 * np.eye(3)))
+    net.add_point("p2", "A", uvct3([0.2, 0.0, 0.0], 1e-6 * np.eye(3)))
 
-    delta_ind, C_ind = net.query_relative_vector_independent("p1", "p2", "B")
-    delta_corr, C_corr = net.query_relative_vector("p1", "p2", "B")
+    result_ind  = net.query_relative_vector_independent("p1", "p2", "B")
+    result_corr = net.query_relative_vector("p1", "p2", "B")
+    delta_ind  = np.array([result_ind.x,  result_ind.y,  result_ind.z ])
+    delta_corr = np.array([result_corr.x, result_corr.y, result_corr.z])
+    C_ind  = result_ind.C
+    C_corr = result_corr.C
 
     # Same mean
     assert np.allclose(delta_ind, delta_corr)

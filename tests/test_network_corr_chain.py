@@ -1,5 +1,6 @@
 import numpy as np
 from uncertainty_networks import UncertainTransform, GeometricNetwork
+from uncertainty_networks import uvct3
 from uncertainty_networks.se3 import make_se3, rotz
 
 
@@ -11,11 +12,13 @@ def test_corr_chain_trace_not_increase():
     net.add_edge("C", "D", UncertainTransform(make_se3(rotz(0.03), [0, 0, 0.08]), np.diag([5e-6]*6)), add_inverse=True)
 
     Cp = 2e-6 * np.eye(3)
-    net.add_point("p1", "A", [0.05, 0.01, 0.0], Cp)
-    net.add_point("p2", "C", [0.02, -0.01, 0.01], Cp)
+    net.add_point("p1", "A", uvct3([0.05,  0.01,  0.0 ], Cp))
+    net.add_point("p2", "C", uvct3([0.02, -0.01,  0.01], Cp))
 
-    _, C_ind = net.query_relative_vector_independent("p1", "p2", "D")
-    _, C_corr = net.query_relative_vector("p1", "p2", "D")
+    result_ind  = net.query_relative_vector_independent("p1", "p2", "D")
+    result_corr = net.query_relative_vector("p1", "p2", "D")
+    C_ind  = result_ind.C
+    C_corr = result_corr.C
 
     assert np.allclose(C_ind, C_ind.T)
     assert np.allclose(C_corr, C_corr.T)

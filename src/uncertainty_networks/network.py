@@ -55,7 +55,8 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from .uncertain_geometry import UncertainTransform
-from .uncertain_types import uFrame
+from .uncertain_types import uFrame, uvct3
+from .nominal_types import vct3, Frame
 from .se3 import adjoint_se3, inv_se3, skew
 
 
@@ -80,8 +81,10 @@ class PathResult:
     ----------
     path : list[str]
         Frame names [start, ..., goal].
-    transform : UncertainTransform
-        Composed nominal transform and propagated covariance along this path.
+    transform : uFrame
+        Composed uncertain frame along this path.
+        Access .F_nom for the 4×4 nominal matrix, .C for the 6×6 covariance,
+        and .F for the nominal Frame object.
     edge_ids : list[str]
         edge_id for each hop (length = len(path) - 1).
     certain_mask : list[bool]
@@ -92,7 +95,7 @@ class PathResult:
         edge_type per hop: "se3", "rot_only", "trans_only", or "vector".
     """
     path: List[str]
-    transform: UncertainTransform
+    transform: uFrame
     edge_ids: List[str] = field(default_factory=list)
     certain_mask: List[bool] = field(default_factory=list)
     forward_mask: List[bool] = field(default_factory=list)
@@ -110,15 +113,16 @@ class FusedQueryResult:
 
     Attributes
     ----------
-    transform : UncertainTransform
-        Best-estimate transform.  Nominal from first path (all paths agree
-        nominally in a consistent network).  C is the unified C_0.
+    transform : uFrame
+        Best-estimate uncertain frame.  Nominal from first path (all paths
+        agree nominally in a consistent network).  C is the unified C_0.
+        Access .F for the nominal Frame, .F_nom for the 4×4 matrix.
     n_paths : int
         Number of simple paths found and used.
     path_results : list[PathResult]
         Per-path results before fusion (for diagnostics).
     """
-    transform: UncertainTransform
+    transform: uFrame
     n_paths: int
     path_results: List[PathResult]
 
@@ -127,8 +131,7 @@ class FusedQueryResult:
 class PointNode:
     """A 3-D point rigidly attached to a coordinate frame."""
     frame: str
-    p_local: Array   # (3,) nominal local coordinates
-    Cp: Array        # (3,3) local covariance
+    point: uvct3   # nominal local coordinates + local covariance
 
 
 @dataclass
@@ -204,7 +207,7 @@ class GeometricNetwork:
         self,
         src: str,
         dst: str,
-        T_src_dst: UncertainTransform,
+        T_src_dst: UncertainTransform | uFrame | Frame,
         add_inverse: bool = True,
         is_certain: bool = False,
         edge_type: str = "se3",
@@ -219,7 +222,9 @@ class GeometricNetwork:
         Parameters
         ----------
         src, dst : str
-        T_src_dst : UncertainTransform
+        T_src_dst : UncertainTransform | uFrame | Frame
+            Passing a Frame (certain transform) automatically sets is_certain=True
+            and uses zero covariance.
         add_inverse : bool
             Also add the reverse edge (same edge_id, is_forward=False).
         is_certain : bool
@@ -232,6 +237,9 @@ class GeometricNetwork:
         """
         if isinstance(T_src_dst, uFrame):
             T_src_dst = T_src_dst.to_uncertain_transform()
+        elif isinstance(T_src_dst, Frame):
+            T_src_dst = UncertainTransform.from_frame(T_src_dst)
+            is_certain = True
 
         if edge_type not in _VALID_EDGE_TYPES:
             raise ValueError(
@@ -280,16 +288,11 @@ class GeometricNetwork:
         self,
         name: str,
         frame: str,
-        p_local: Array,
-        Cp: Array,
+        point: uvct3,
     ) -> None:
         if frame not in self._adj:
             raise KeyError(f"Unknown frame '{frame}'")
-        self._points[name] = PointNode(
-            frame=frame,
-            p_local=np.asarray(p_local, dtype=np.float64).reshape(3),
-            Cp=np.asarray(Cp, dtype=np.float64).reshape(3, 3),
-        )
+        self._points[name] = PointNode(frame=frame, point=point)
 
     def has_point(self, name: str) -> bool:
         return name in self._points
@@ -425,7 +428,7 @@ class GeometricNetwork:
                 T = T @ e.transform
             results.append(PathResult(
                 path=path,
-                transform=T,
+                transform=uFrame(T),
                 edge_ids=[e.edge_id for e in edges],
                 certain_mask=[e.is_certain for e in edges],
                 forward_mask=[e.is_forward for e in edges],
@@ -459,7 +462,7 @@ class GeometricNetwork:
 
         return PathResult(
             path=path,
-            transform=T,
+            transform=uFrame(T),
             edge_ids=[e.edge_id for e in edges],
             certain_mask=[e.is_certain for e in edges],
             forward_mask=[e.is_forward for e in edges],
@@ -484,7 +487,7 @@ class GeometricNetwork:
 
         return PathResult(
             path=path,
-            transform=T,
+            transform=uFrame(T),
             edge_ids=[e.edge_id for e in edges],
             certain_mask=[e.is_certain for e in edges],
             forward_mask=[e.is_forward for e in edges],
@@ -689,7 +692,7 @@ class GeometricNetwork:
         F_nom = path_results[0].transform.F_nom
 
         return FusedQueryResult(
-            transform=UncertainTransform(F_nom, C_0),
+            transform=uFrame(UncertainTransform(F_nom, C_0)),
             n_paths=m,
             path_results=path_results,
         )
@@ -719,11 +722,13 @@ class GeometricNetwork:
         if target_frame not in self._adj:
             raise KeyError(f"Unknown target frame '{target_frame}'")
 
-        point = self._points[point_name]
-        source_frame = point.frame
+        point_node = self._points[point_name]
+        source_frame = point_node.frame
+        p_local = np.array([point_node.point.x, point_node.point.y, point_node.point.z], dtype=np.float64)
+        Cp_local = point_node.point.C
 
         if source_frame == target_frame:
-            return point.p_local.copy(), point.Cp.copy(), {}
+            return p_local.copy(), Cp_local.copy(), {}
 
         path = self.find_path(source_frame, target_frame)
         if not path:
@@ -746,7 +751,7 @@ class GeometricNetwork:
         R_total = T_total[:3, :3]
         t_total = T_total[:3, 3]
 
-        p_nom = R_total @ point.p_local + t_total
+        p_nom = R_total @ p_local + t_total
 
         # Per-edge Jacobians under CIS I right-perturbation.
         # J_k = R_01k @ [-skew(p_suf_k), I]   (3×6)
@@ -756,7 +761,7 @@ class GeometricNetwork:
         Cp_edges = np.zeros((3, 3), dtype=np.float64)
 
         R_prefix = np.eye(3, dtype=np.float64)  # rotation before edge k
-        p_in = point.p_local
+        p_in = p_local
 
         for k, e in enumerate(edges):
             R_k = e.transform.F_nom[:3, :3]
@@ -773,7 +778,7 @@ class GeometricNetwork:
             R_prefix = R_01k
 
         # Intrinsic point covariance mapped by R_total.
-        Cp_point = R_total @ point.Cp @ R_total.T
+        Cp_point = R_total @ Cp_local @ R_total.T
         Cp_out = _sym(Cp_edges + Cp_point)
 
         return p_nom, Cp_out, edge_terms
@@ -786,50 +791,50 @@ class GeometricNetwork:
         self,
         point_name: str,
         target_frame: str,
-    ) -> Tuple[Array, Array]:
-        """Query a point into target_frame.  Returns (p_nom, Cp)."""
+    ) -> uvct3:
+        """Query a point into target_frame.  Returns uvct3."""
         p, Cp, _ = self._query_point_with_edge_jacobians(point_name, target_frame)
-        return p, Cp
+        return uvct3(vct3(float(p[0]), float(p[1]), float(p[2])), Cp)
 
     def query_point_to_point(
         self,
         src_point: str,
         dst_point: str,
         query_frame: str,
-    ) -> Tuple[Array, Array, Array, Array]:
+    ) -> Tuple[uvct3, uvct3]:
         """
         Query two points into a common frame.
-        Returns (p_src, Cp_src, p_dst, Cp_dst).
+        Returns (src_uvct3, dst_uvct3).
         """
         if query_frame not in self._adj:
             raise KeyError(f"Unknown query frame '{query_frame}'")
-        p_src, Cp_src = self.query_point(src_point, query_frame)
-        p_dst, Cp_dst = self.query_point(dst_point, query_frame)
-        return p_src, Cp_src, p_dst, Cp_dst
+        src = self.query_point(src_point, query_frame)
+        dst = self.query_point(dst_point, query_frame)
+        return src, dst
 
     def query_relative_vector_independent(
         self,
         src_point: str,
         dst_point: str,
         query_frame: str,
-    ) -> Tuple[Array, Array]:
+    ) -> uvct3:
         """
         Relative vector with the independence approximation (upper bound):
             delta   = p_dst - p_src
             C_delta = C_dst + C_src
         """
-        p_src, Cp_src, p_dst, Cp_dst = self.query_point_to_point(
-            src_point, dst_point, query_frame
-        )
+        src, dst = self.query_point_to_point(src_point, dst_point, query_frame)
+        p_src = np.array([src.x, src.y, src.z])
+        p_dst = np.array([dst.x, dst.y, dst.z])
         delta = p_dst - p_src
-        return delta, _sym(Cp_dst + Cp_src)
+        return uvct3(vct3(float(delta[0]), float(delta[1]), float(delta[2])), _sym(dst.C + src.C))
 
     def query_relative_vector(
         self,
         src_point: str,
         dst_point: str,
         query_frame: str,
-    ) -> Tuple[Array, Array]:
+    ) -> uvct3:
         """
         Correlation-aware relative vector (correct).
 
@@ -849,8 +854,9 @@ class GeometricNetwork:
 
         Returns
         -------
-        delta  : (3,)
-        C_delta : (3,3)
+        uvct3
+            .p : vct3   — nominal delta (p_dst - p_src)
+            .C : (3,3)  — correlation-aware covariance of the delta
         """
         if query_frame not in self._adj:
             raise KeyError(f"Unknown query frame '{query_frame}'")
@@ -873,7 +879,7 @@ class GeometricNetwork:
             cross += J_dst @ C_e @ J_src.T   # Cov(p_dst, p_src)
 
         C_delta = _sym(Cp_dst + Cp_src - cross - cross.T)
-        return delta, C_delta
+        return uvct3(vct3(float(delta[0]), float(delta[1]), float(delta[2])), C_delta)
 
     def query_distance(
         self,
@@ -890,7 +896,9 @@ class GeometricNetwork:
         d     : float   nominal distance
         var_d : float   first-order variance
         """
-        delta, C_delta = self.query_relative_vector(src_point, dst_point, query_frame)
+        result = self.query_relative_vector(src_point, dst_point, query_frame)
+        delta   = np.array([result.x, result.y, result.z])
+        C_delta = result.C
         d = float(np.linalg.norm(delta))
 
         if d < eps:
@@ -1026,23 +1034,17 @@ class GeometricNetwork:
         Returns
         -------
         dict  (src, dst, query_frame) -> {
-            "delta_ind" : (3,),
-            "C_ind"     : (3,3),
-            "delta_corr": (3,),
-            "C_corr"    : (3,3),
-            "d"         : float  (only if compute_distance=True),
-            "var_d"     : float  (only if compute_distance=True),
+            "ind"   : uvct3  — independence-approximation relative vector,
+            "corr"  : uvct3  — correlation-aware relative vector,
+            "d"     : float  (only if compute_distance=True),
+            "var_d" : float  (only if compute_distance=True),
         }
         """
         results = {}
         for (src, dst, q) in pairs:
-            delta_ind,  C_ind  = self.query_relative_vector_independent(src, dst, q)
-            delta_corr, C_corr = self.query_relative_vector(src, dst, q)
-            entry = {
-                "delta_ind":  delta_ind,
-                "C_ind":      C_ind,
-                "delta_corr": delta_corr,
-                "C_corr":     C_corr,
+            entry: dict = {
+                "ind":  self.query_relative_vector_independent(src, dst, q),
+                "corr": self.query_relative_vector(src, dst, q),
             }
             if compute_distance:
                 d, var_d = self.query_distance(src, dst, q)

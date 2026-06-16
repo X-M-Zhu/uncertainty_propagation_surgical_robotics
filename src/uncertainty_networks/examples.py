@@ -10,6 +10,7 @@ Reusable network builders for simulations (no default evaluation pairs).
 import numpy as np
 from .se3 import make_se3, rotz
 from .uncertain_geometry import UncertainTransform
+from .uncertain_types import uvct3
 from .network import GeometricNetwork
 
 
@@ -39,8 +40,8 @@ def build_shared_infrastructure_network() -> GeometricNetwork:
 
     # Points (names only; you can decide what to evaluate later)
     Cp = 2e-6 * np.eye(3)
-    net.add_point("p_marker", "Mk",   [0.02, 0.00, 0.00], Cp)
-    net.add_point("p_tip",    "Tool", [0.00, 0.00, -0.12], Cp)
-    net.add_point("p_landmark", "Anat", [0.03, -0.01, 0.02], Cp)
+    net.add_point("p_marker",   "Mk",   uvct3([0.02, 0.00,  0.00], Cp))
+    net.add_point("p_tip",      "Tool", uvct3([0.00, 0.00, -0.12], Cp))
+    net.add_point("p_landmark", "Anat", uvct3([0.03, -0.01, 0.02], Cp))
 
     return net

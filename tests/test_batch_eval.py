@@ -1,4 +1,5 @@
 import numpy as np
+from uncertainty_networks import uvct3
 from uncertainty_networks.examples import build_shared_infrastructure_network
 
 
@@ -17,10 +18,12 @@ def test_evaluate_pairs_runs_empty_and_nonempty():
     assert key in out1
 
     entry = out1[key]
-    assert entry["delta_ind"].shape == (3,)
-    assert entry["C_ind"].shape == (3, 3)
-    assert entry["delta_corr"].shape == (3,)
-    assert entry["C_corr"].shape == (3, 3)
-    assert isinstance(entry["d"], float)
+    ind  = entry["ind"]
+    corr = entry["corr"]
+    assert isinstance(ind,  uvct3)
+    assert isinstance(corr, uvct3)
+    assert ind.C.shape  == (3, 3)
+    assert corr.C.shape == (3, 3)
+    assert isinstance(entry["d"],     float)
     assert isinstance(entry["var_d"], float)
-    assert np.allclose(entry["C_corr"], entry["C_corr"].T)
+    assert np.allclose(corr.C, corr.C.T)
