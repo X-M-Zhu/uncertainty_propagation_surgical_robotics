@@ -23,7 +23,7 @@ Mathematical reference: docs/math_note.pdf
 
 from .uncertain_geometry import UncertainTransform, Convention
 from .nominal_types import vct3, Rot, Frame
-from .uncertain_types import uVector, uvct3, uRot, uFrame
+from .uncertain_types import uScalar, uVector, uvct3, uRot, uFrame
 from .network import (
     GeometricNetwork,
     PathResult,
@@ -50,7 +50,7 @@ __all__ = [
     # Spatial math primitives
     "vct3", "Rot", "Frame",
     # Uncertain types (Dr. Taylor CIS I API)
-    "uVector", "uvct3", "uRot", "uFrame",
+    "uScalar", "uVector", "uvct3", "uRot", "uFrame",
     # Network
     "GeometricNetwork",
     "PathResult",

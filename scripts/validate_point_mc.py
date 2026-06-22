@@ -5,7 +5,7 @@
 Monte Carlo validation for point uncertainty propagation under CIS I convention.
 
 Goal:
-Validate the point covariance propagation formula used in UncertainTransform.transform_point:
+Validate the point covariance propagation formula used in UncertainTransform.apply_to_point:
 
 Nominal transform:
     p'_nom = R p + t
@@ -69,7 +69,7 @@ def main():
     U = UncertainTransform(T_nom, C)
 
     # Analytical covariance from implementation
-    p_nom, Cp_an = U.transform_point(p, Cp=Cp)
+    p_nom, Cp_an = U.apply_to_point(p, Cp=Cp)
 
     # Monte Carlo simulation
     mean0_6 = np.zeros(6, dtype=float)

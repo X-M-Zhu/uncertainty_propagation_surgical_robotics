@@ -6,9 +6,9 @@ Monte Carlo validation for frame → point uncertainty propagation.
 
 This validates the CIS-I linearization used in
 
-    UncertainTransform.transform_point()
+    UncertainTransform.apply_to_point()
 
-We compare the analytic covariance returned by transform_point()
+We compare the analytic covariance returned by apply_to_point()
 with covariance estimated from Monte Carlo sampling of the pose
 perturbation.
 
@@ -75,7 +75,7 @@ def main():
     p = np.array([0.4, -0.1, 0.2])
 
     # Analytic propagation
-    p_nom, Cp_analytic = F.transform_point(p)
+    p_nom, Cp_analytic = F.apply_to_point(p)
 
     samples = []
 

@@ -9,12 +9,32 @@ but carries covariance. All heavy math delegates to UncertainTransform.
 
 API (following Dr. Taylor's CIS I specification):
 
+    uScalar(s, var)         uncertain scalar
     uVector(v, cov)         uncertain vector, any dimension
     uvct3(p, cov)          uncertain 3-D point
     uRot(R, cov)            uncertain rotation
     uFrame(F, cov)          uncertain rigid frame
 
 Supported operations::
+
+    # uScalar
+    us3 = us1 + us2           (variances add)
+    us3 = us1 - us2           (variances add)
+    us3 = us1 * us2           (first-order product)
+    us3 = us1 / us2           (first-order quotient)
+    us3 = us1 ** n            (first-order power)
+    us3 = a  * us1            (a is a Python float)
+    us3 = -us1
+
+    # uVector
+    uv3 = uv1 + uv2
+    uv3 = uv1 - uv2           (covariances add even for subtraction)
+    uv3 = a  * uv1            (scalar scaling)
+    uv3 = A  @ uv1            (2-D matrix: linear map,  returns uVector)
+    us  = w  @ uv1            (1-D vector: dot product, returns uScalar)
+    uv3 = uv1 @ A             (uv row @ matrix)
+    us  = uv1.dot(w)          (explicit dot product)
+    us  = uv1.norm()          (Euclidean norm)
 
     # uvct3
     up3 = up1 + up2
@@ -42,9 +62,9 @@ Supported operations::
     up2 = uF  * p1
 
     # uRot from uncertain angle or axis
-    uR = uRot(axis_str, uAngle)     uAngle is a uVector of dim 1
+    uR = uRot(axis_str, uAngle)     uAngle is a uScalar or uVector of dim 1
     uR = uRot(uAxis,    angle)      uAxis  is a uVector or uvct3
-    uR = uRot(uAxis,    uAngle)     both uncertain
+    uR = uRot(uAxis,    uAngle)     both uncertain; uAngle is uScalar or uVector
 """
 
 from __future__ import annotations
@@ -71,6 +91,126 @@ _AXIS_VECS = {
 }
 
 
+# ── uScalar ───────────────────────────────────────────────────────────────────
+
+class uScalar:
+    """
+    Uncertain scalar.
+
+        us = uScalar(s)        zero variance
+        us = uScalar(s, var)   explicit variance (NOT std dev)
+
+    All arithmetic uses first-order Gaussian propagation.  For f(a, b):
+        var_f = (df/da)^2 * var_a  +  (df/db)^2 * var_b   (independent)
+
+    Operations::
+
+        us3 = us1 + us2,  us1 + float,  float + us1
+        us3 = us1 - us2,  us1 - float,  float - us1
+        us3 = us1 * us2,  us1 * float,  float * us1
+        us3 = us1 / us2,  us1 / float,  float / us1
+        us3 = us1 ** n
+        us3 = -us1
+    """
+
+    def __init__(self, s, var: float = 0.0):
+        self.s   = float(s)
+        self.var = float(var)
+
+    @property
+    def std(self) -> float:
+        """Standard deviation (positive square root of variance)."""
+        return float(np.sqrt(max(self.var, 0.0)))
+
+    # ── addition ──────────────────────────────────────────────────────────────
+
+    def __add__(self, other):
+        if isinstance(other, uScalar):
+            return uScalar(self.s + other.s, self.var + other.var)
+        if np.isscalar(other):
+            return uScalar(self.s + float(other), self.var)
+        return NotImplemented
+
+    def __radd__(self, other):
+        if np.isscalar(other):
+            return uScalar(float(other) + self.s, self.var)
+        return NotImplemented
+
+    # ── subtraction ───────────────────────────────────────────────────────────
+
+    def __sub__(self, other):
+        if isinstance(other, uScalar):
+            # Var(a - b) = var_a + var_b  for independent a, b
+            return uScalar(self.s - other.s, self.var + other.var)
+        if np.isscalar(other):
+            return uScalar(self.s - float(other), self.var)
+        return NotImplemented
+
+    def __rsub__(self, other):
+        if np.isscalar(other):
+            return uScalar(float(other) - self.s, self.var)
+        return NotImplemented
+
+    # ── negation ──────────────────────────────────────────────────────────────
+
+    def __neg__(self):
+        return uScalar(-self.s, self.var)
+
+    # ── multiplication ────────────────────────────────────────────────────────
+
+    def __mul__(self, other):
+        if isinstance(other, uScalar):
+            # d(a*b)/da = b,  d(a*b)/db = a
+            return uScalar(
+                self.s * other.s,
+                other.s ** 2 * self.var + self.s ** 2 * other.var,
+            )
+        if np.isscalar(other):
+            a = float(other)
+            return uScalar(self.s * a, a ** 2 * self.var)
+        return NotImplemented
+
+    def __rmul__(self, other):
+        if np.isscalar(other):
+            a = float(other)
+            return uScalar(a * self.s, a ** 2 * self.var)
+        return NotImplemented
+
+    # ── division ──────────────────────────────────────────────────────────────
+
+    def __truediv__(self, other):
+        if isinstance(other, uScalar):
+            # d(a/b)/da = 1/b,  d(a/b)/db = -a/b^2
+            s_out   = self.s / other.s
+            var_out = (self.var / other.s ** 2
+                       + (self.s / other.s ** 2) ** 2 * other.var)
+            return uScalar(s_out, var_out)
+        if np.isscalar(other):
+            a = float(other)
+            return uScalar(self.s / a, self.var / a ** 2)
+        return NotImplemented
+
+    def __rtruediv__(self, other):
+        if np.isscalar(other):
+            # f(s) = a/s  →  df/ds = -a/s^2
+            a       = float(other)
+            s_out   = a / self.s
+            var_out = (a / self.s ** 2) ** 2 * self.var
+            return uScalar(s_out, var_out)
+        return NotImplemented
+
+    # ── power ─────────────────────────────────────────────────────────────────
+
+    def __pow__(self, n):
+        # f(s) = s^n  →  df/ds = n * s^(n-1)
+        n     = float(n)
+        deriv = n * float(self.s ** (n - 1))
+        return uScalar(float(self.s ** n), deriv ** 2 * self.var)
+
+    def __repr__(self):
+        return f"uScalar(s={self.s:.6g}, std={self.std:.3g})"
+
+
 # ── uVector ───────────────────────────────────────────────────────────────────
 
 class uVector:
@@ -79,12 +219,130 @@ class uVector:
 
         uv = uVector(v)           zero covariance
         uv = uVector(v, cov)      explicit n×n covariance
+
+    Operations::
+
+        uv3 = uv1 + uv2          (covariances add, independent assumption)
+        uv3 = uv1 - uv2          (covariances add even for subtraction)
+        uv3 = uv1 + arr          (arr is a constant ndarray, no extra variance)
+        uv3 = a  * uv1           (scalar scaling)
+        uv3 = A  @ uv1           (2-D matrix: linear map  C_out = A C A^T)
+        us  = w  @ uv1           (1-D vector: dot product -> uScalar)
+        uv3 = uv1 @ A            (uv row @ matrix)
+        us  = uv1.dot(w)         (explicit dot product -> uScalar)
+        us  = uv1.norm()         (Euclidean norm -> uScalar)
     """
+
+    # Tell numpy not to handle this type with its own ufuncs/matmul.
+    # Without this, `np.array @ uv` and `np.array + uv` are intercepted
+    # by numpy before Python can dispatch to __rmatmul__ / __radd__.
+    __array_ufunc__ = None
 
     def __init__(self, v, C=None):
         self.v = np.asarray(v, dtype=np.float64).ravel()
         n = len(self.v)
-        self.C = np.zeros((n, n), dtype=np.float64) if C is None else np.asarray(C, dtype=np.float64)
+        self.C = (np.zeros((n, n), dtype=np.float64) if C is None
+                  else np.asarray(C, dtype=np.float64))
+
+    # ── addition ──────────────────────────────────────────────────────────────
+
+    def __add__(self, other):
+        if isinstance(other, uVector):
+            if self.v.shape != other.v.shape:
+                raise ValueError(
+                    f"uVector shape mismatch in +: {self.v.shape} vs {other.v.shape}"
+                )
+            return uVector(self.v + other.v, self.C + other.C)
+        arr = np.asarray(other, dtype=np.float64).ravel()
+        return uVector(self.v + arr, self.C.copy())
+
+    def __radd__(self, other):
+        arr = np.asarray(other, dtype=np.float64).ravel()
+        return uVector(arr + self.v, self.C.copy())
+
+    # ── subtraction ───────────────────────────────────────────────────────────
+
+    def __sub__(self, other):
+        if isinstance(other, uVector):
+            if self.v.shape != other.v.shape:
+                raise ValueError(
+                    f"uVector shape mismatch in -: {self.v.shape} vs {other.v.shape}"
+                )
+            # Var(a - b) = C_a + C_b for independent vectors
+            return uVector(self.v - other.v, self.C + other.C)
+        arr = np.asarray(other, dtype=np.float64).ravel()
+        return uVector(self.v - arr, self.C.copy())
+
+    def __rsub__(self, other):
+        arr = np.asarray(other, dtype=np.float64).ravel()
+        return uVector(arr - self.v, self.C.copy())
+
+    # ── negation ──────────────────────────────────────────────────────────────
+
+    def __neg__(self):
+        return uVector(-self.v, self.C.copy())
+
+    # ── scalar scaling ────────────────────────────────────────────────────────
+
+    def __mul__(self, other):
+        if np.isscalar(other):
+            a = float(other)
+            return uVector(a * self.v, a ** 2 * self.C)
+        return NotImplemented
+
+    def __rmul__(self, other):
+        if np.isscalar(other):
+            a = float(other)
+            return uVector(a * self.v, a ** 2 * self.C)
+        return NotImplemented
+
+    # ── linear maps ───────────────────────────────────────────────────────────
+
+    def __rmatmul__(self, A):
+        """A @ uv  where A is a constant ndarray.
+
+        A is 2-D (m, n) -> uVector  with C_out = A C A^T
+        A is 1-D (n,)   -> uScalar  (dot product)
+        """
+        A = np.asarray(A, dtype=np.float64)
+        if A.ndim == 1:
+            return uScalar(float(A @ self.v), float(A @ self.C @ A))
+        if A.ndim == 2:
+            return uVector(A @ self.v, A @ self.C @ A.T)
+        raise ValueError(
+            f"uVector __rmatmul__: expected 1-D or 2-D array, got {A.ndim}-D"
+        )
+
+    def __matmul__(self, A):
+        """uv @ A  where A is a constant ndarray.
+
+        A is 2-D (n, m) -> uVector  with C_out = A^T C A
+        A is 1-D (n,)   -> uScalar  (dot product)
+        """
+        A = np.asarray(A, dtype=np.float64)
+        if A.ndim == 1:
+            return uScalar(float(self.v @ A), float(A @ self.C @ A))
+        if A.ndim == 2:
+            return uVector(self.v @ A, A.T @ self.C @ A)
+        raise ValueError(
+            f"uVector __matmul__: expected 1-D or 2-D array, got {A.ndim}-D"
+        )
+
+    def dot(self, w: np.ndarray) -> "uScalar":
+        """Dot product with a constant vector, returning a uScalar."""
+        w = np.asarray(w, dtype=np.float64).ravel()
+        return uScalar(float(w @ self.v), float(w @ self.C @ w))
+
+    def norm(self) -> "uScalar":
+        """Euclidean norm with first-order variance propagation.
+
+        ||v|| -> uScalar(d, u^T C u)  where u = v / ||v||
+        """
+        d = float(np.linalg.norm(self.v))
+        if d < 1e-12:
+            return uScalar(d, float(np.trace(self.C)))
+        u = self.v / d
+        return uScalar(d, float(u @ self.C @ u))
 
     def __repr__(self):
         return f"uVector(v={self.v}, C_diag={np.diag(self.C)})"
@@ -167,8 +425,12 @@ class uRot:
 
         elif isinstance(first, str):
             # uRot('z', uAngle)  or  uRot('z', angle_float)
+            # uAngle may be a uScalar, a 1-D uVector, or a plain float.
             ax = _AXIS_VECS[first.lower()]
-            if isinstance(second, uVector):
+            if isinstance(second, uScalar):
+                self._R = Rot(axis=first, angle=second.s)
+                self.C = np.outer(ax, ax) * second.var
+            elif isinstance(second, uVector):
                 angle_nom = float(second.v[0])
                 self._R = Rot(axis=first, angle=angle_nom)
                 self.C = np.outer(ax, ax) * float(second.C[0, 0])
@@ -188,10 +450,14 @@ class uRot:
             norm = np.linalg.norm(ax_nom)
             ax_nom = ax_nom / (norm + 1e-30)
 
-            if isinstance(second, uVector):
+            if isinstance(second, uScalar):
+                angle_nom = second.s
+                var_angle = second.var
+                # Calpha = angle^2 * C_axis + (ax ⊗ ax) * var_angle  (first-order)
+                self.C = angle_nom ** 2 * C_axis + np.outer(ax_nom, ax_nom) * var_angle
+            elif isinstance(second, uVector):
                 angle_nom = float(second.v[0])
                 var_angle = float(second.C[0, 0])
-                # Calpha = angle^2 * C_axis + (ax ⊗ ax) * var_angle  (first-order)
                 self.C = angle_nom ** 2 * C_axis + np.outer(ax_nom, ax_nom) * var_angle
             else:
                 angle_nom = float(second)
@@ -262,7 +528,7 @@ class uRot:
 
     # ── convention bridge ──
     @classmethod
-    def from_left_perturbation(cls, R: Rot, C_left: np.ndarray) -> "uRot":
+    def from_left_covariance(cls, R: Rot, C_left: np.ndarray) -> "uRot":
         """Construct a uRot from a left-convention (world-frame) rotation covariance.
 
         Left model:  R_true = Exp(alpha_L) * R_nom
@@ -277,7 +543,7 @@ class uRot:
         C_right = R_mat.T @ C_left @ R_mat
         return cls(R, 0.5 * (C_right + C_right.T))
 
-    def to_right_perturbation(self) -> "uRot":
+    def as_right_convention(self) -> "uRot":
         """Return this rotation with covariance in right (body-frame) convention.
 
         If already RIGHT: no-op.  If LEFT: converts C_left → C_right via R^T.
@@ -291,7 +557,7 @@ class uRot:
         result._convention = Convention.RIGHT
         return result
 
-    def to_left_perturbation(self) -> "uRot":
+    def as_left_convention(self) -> "uRot":
         """Return this rotation with covariance in left (world-frame) convention.
 
         If already LEFT: no-op.  If RIGHT: converts C_right → C_left via R.
@@ -385,7 +651,7 @@ class uFrame:
 
     @property
     def F(self) -> Frame:
-        return self._ut.to_frame()
+        return self._ut.get_nominal_frame()
 
     @property
     def F_nom(self) -> np.ndarray:
@@ -403,7 +669,7 @@ class uFrame:
 
     # ── convention bridge ──
     @classmethod
-    def from_left_perturbation(cls, frame_or_F_nom, C_left: np.ndarray) -> "uFrame":
+    def from_left_covariance(cls, frame_or_F_nom, C_left: np.ndarray) -> "uFrame":
         """Construct a uFrame from a left-convention (world-frame) pose covariance.
 
         Left model:  T_true = Exp(eta_L) * F_nom
@@ -420,18 +686,18 @@ class uFrame:
             F_nom[:3, 3] = [frame_or_F_nom.p.x, frame_or_F_nom.p.y, frame_or_F_nom.p.z]
         else:
             F_nom = np.asarray(frame_or_F_nom, dtype=np.float64)
-        return cls(UncertainTransform.from_left_perturbation(F_nom, C_left))
+        return cls(UncertainTransform.from_left_covariance(F_nom, C_left))
 
-    def to_right_perturbation(self) -> "uFrame":
+    def as_right_convention(self) -> "uFrame":
         """No-op — covariance is already in right (body-frame) convention."""
-        return uFrame(self._ut.to_right_perturbation())
+        return uFrame(self._ut.as_right_convention())
 
-    def to_left_perturbation(self) -> "uFrame":
+    def as_left_convention(self) -> "uFrame":
         """Convert right-convention (body-frame) covariance to left-convention (world-frame).
 
         C_left = Ad_{F_nom} @ C_right @ Ad_{F_nom}^T
         """
-        return uFrame(self._ut.to_left_perturbation())
+        return uFrame(self._ut.as_left_convention())
 
     # ── multiplication ──
     def __mul__(self, other):
@@ -450,11 +716,11 @@ class uFrame:
             return uFrame(self._ut.compose(UncertainTransform(F_nom, np.zeros((6, 6)))))
 
         if isinstance(other, uvct3):
-            p_out, C_out = self._ut.transform_point(other.p, Cp=other.C)
+            p_out, C_out = self._ut.apply_to_point(other.p, Cp=other.C)
             return uvct3(p_out, C_out)
 
         if isinstance(other, vct3):
-            p_out, C_out = self._ut.transform_point(other)
+            p_out, C_out = self._ut.apply_to_point(other)
             return uvct3(p_out, C_out)
 
         return NotImplemented

@@ -10,7 +10,7 @@ Covers every operator overload listed in the spec:
 import math
 import numpy as np
 import pytest
-from uncertainty_networks import vct3, Rot, Frame, uVector, uvct3, uRot, uFrame
+from uncertainty_networks import vct3, Rot, Frame, uScalar, uVector, uvct3, uRot, uFrame
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -20,6 +20,107 @@ def _cov3(scale=1e-4):
 
 def _cov6(scale=1e-4):
     return scale * np.eye(6)
+
+
+# ── uScalar ───────────────────────────────────────────────────────────────────
+
+def test_uscalar_construction():
+    us = uScalar(3.0, 0.04)
+    assert math.isclose(us.s,   3.0)
+    assert math.isclose(us.var, 0.04)
+    assert math.isclose(us.std, 0.2)
+
+
+def test_uscalar_default_zero_variance():
+    us = uScalar(5.0)
+    assert math.isclose(us.var, 0.0)
+    assert math.isclose(us.std, 0.0)
+
+
+def test_uscalar_add_two():
+    us3 = uScalar(1.0, 0.01) + uScalar(2.0, 0.04)
+    assert math.isclose(us3.s,   3.0)
+    assert math.isclose(us3.var, 0.05)
+
+
+def test_uscalar_add_float():
+    us2 = uScalar(1.0, 0.01) + 2.0
+    assert math.isclose(us2.s,   3.0)
+    assert math.isclose(us2.var, 0.01)   # constant shift adds no variance
+
+
+def test_uscalar_radd_float():
+    us2 = 2.0 + uScalar(1.0, 0.01)
+    assert math.isclose(us2.s,   3.0)
+    assert math.isclose(us2.var, 0.01)
+
+
+def test_uscalar_sub():
+    us3 = uScalar(5.0, 0.04) - uScalar(2.0, 0.01)
+    assert math.isclose(us3.s,   3.0)
+    assert math.isclose(us3.var, 0.05)   # variances add even for subtraction
+
+
+def test_uscalar_sub_float():
+    us2 = uScalar(5.0, 0.04) - 2.0
+    assert math.isclose(us2.s,   3.0)
+    assert math.isclose(us2.var, 0.04)
+
+
+def test_uscalar_rsub_float():
+    us2 = 5.0 - uScalar(2.0, 0.04)
+    assert math.isclose(us2.s,   3.0)
+    assert math.isclose(us2.var, 0.04)
+
+
+def test_uscalar_neg():
+    un = -uScalar(3.0, 0.09)
+    assert math.isclose(un.s,   -3.0)
+    assert math.isclose(un.var,  0.09)   # negation leaves variance unchanged
+
+
+def test_uscalar_mul_float():
+    us2 = 3.0 * uScalar(2.0, 0.04)
+    assert math.isclose(us2.s,   6.0)
+    assert math.isclose(us2.var, 9.0 * 0.04)
+
+
+def test_uscalar_mul_two():
+    # var(a*b) = b²*var_a + a²*var_b
+    us3 = uScalar(2.0, 0.01) * uScalar(3.0, 0.04)
+    assert math.isclose(us3.s,   6.0)
+    assert math.isclose(us3.var, 3.0 ** 2 * 0.01 + 2.0 ** 2 * 0.04)
+
+
+def test_uscalar_div_float():
+    us2 = uScalar(6.0, 0.09) / 3.0
+    assert math.isclose(us2.s,   2.0)
+    assert math.isclose(us2.var, 0.09 / 9.0)
+
+
+def test_uscalar_div_two():
+    # d(a/b)/da = 1/b,  d(a/b)/db = -a/b²
+    us1 = uScalar(6.0, 0.09)
+    us2 = uScalar(3.0, 0.01)
+    us3 = us1 / us2
+    assert math.isclose(us3.s, 2.0)
+    expected_var = 0.09 / 9.0 + (6.0 / 9.0) ** 2 * 0.01
+    assert math.isclose(us3.var, expected_var)
+
+
+def test_uscalar_rdiv_float():
+    # f(s) = a/s  →  var_out = (a/s²)² * var
+    us  = uScalar(2.0, 0.04)
+    us2 = 6.0 / us
+    assert math.isclose(us2.s, 3.0)
+    assert math.isclose(us2.var, (6.0 / 4.0) ** 2 * 0.04)
+
+
+def test_uscalar_pow():
+    # f(s) = s²  →  df/ds = 2s  →  var_out = (2s)² * var
+    us2 = uScalar(3.0, 0.01) ** 2
+    assert math.isclose(us2.s,   9.0)
+    assert math.isclose(us2.var, (2 * 3.0) ** 2 * 0.01)
 
 
 # ── uVector ───────────────────────────────────────────────────────────────────
@@ -34,6 +135,99 @@ def test_uvector_explicit_covariance():
     uv = uVector([0.5], [[0.01]])
     assert uv.C.shape == (1, 1)
     assert math.isclose(uv.C[0, 0], 0.01)
+
+
+def test_uvector_add():
+    uv3 = uVector([1.0, 0.0], np.diag([0.01, 0.02])) + uVector([0.0, 2.0], np.diag([0.03, 0.04]))
+    assert np.allclose(uv3.v, [1.0, 2.0])
+    assert np.allclose(uv3.C, np.diag([0.04, 0.06]))
+
+
+def test_uvector_add_array():
+    uv  = uVector([1.0, 2.0], np.eye(2) * 0.01)
+    uv2 = uv + np.array([3.0, 4.0])
+    assert np.allclose(uv2.v, [4.0, 6.0])
+    assert np.allclose(uv2.C, np.eye(2) * 0.01)   # constant adds no variance
+
+
+def test_uvector_radd_array():
+    uv  = uVector([1.0, 2.0], np.eye(2) * 0.01)
+    uv2 = np.array([3.0, 4.0]) + uv
+    assert np.allclose(uv2.v, [4.0, 6.0])
+    assert np.allclose(uv2.C, np.eye(2) * 0.01)
+
+
+def test_uvector_sub():
+    uv3 = uVector([3.0, 4.0], np.eye(2) * 0.02) - uVector([1.0, 1.0], np.eye(2) * 0.01)
+    assert np.allclose(uv3.v, [2.0, 3.0])
+    assert np.allclose(uv3.C, np.eye(2) * 0.03)   # covariances add
+
+
+def test_uvector_sub_array():
+    uv  = uVector([3.0, 4.0], np.eye(2) * 0.02)
+    uv2 = uv - np.array([1.0, 1.0])
+    assert np.allclose(uv2.v, [2.0, 3.0])
+    assert np.allclose(uv2.C, np.eye(2) * 0.02)
+
+
+def test_uvector_neg():
+    uvn = -uVector([1.0, -2.0], np.eye(2) * 0.01)
+    assert np.allclose(uvn.v, [-1.0, 2.0])
+    assert np.allclose(uvn.C, np.eye(2) * 0.01)   # variance unchanged by negation
+
+
+def test_uvector_scalar_mul():
+    uv2 = 3.0 * uVector([1.0, 2.0], np.eye(2) * 0.01)
+    assert np.allclose(uv2.v, [3.0, 6.0])
+    assert np.allclose(uv2.C, np.eye(2) * 0.09)   # 3² * 0.01
+
+
+def test_uvector_rmatmul_matrix_gives_uvector():
+    # A @ uv: (m,n) @ (n,) -> uVector of dim m
+    uv = uVector([1.0, 0.0], np.diag([0.04, 0.01]))
+    A  = np.array([[1.0, 0.0], [0.0, 2.0], [1.0, 1.0]])  # (3,2)
+    result = A @ uv
+    assert isinstance(result, uVector)
+    assert np.allclose(result.v, A @ uv.v)
+    assert np.allclose(result.C, A @ uv.C @ A.T)
+
+
+def test_uvector_rmatmul_vector_gives_uscalar():
+    # w @ uv: (n,) @ (n,) -> uScalar
+    uv = uVector([1.0, 2.0], np.diag([0.01, 0.04]))
+    w  = np.array([3.0, 4.0])
+    result = w @ uv
+    assert isinstance(result, uScalar)
+    assert math.isclose(result.s,   float(w @ uv.v))
+    assert math.isclose(result.var, float(w @ uv.C @ w))
+
+
+def test_uvector_matmul_matrix_gives_uvector():
+    # uv @ A: (n,) @ (n,m) -> uVector of dim m
+    uv = uVector([1.0, 2.0], np.diag([0.01, 0.04]))
+    A  = np.array([[1.0, 0.0], [0.0, 2.0]])  # (2,2)
+    result = uv @ A
+    assert isinstance(result, uVector)
+    assert np.allclose(result.v, uv.v @ A)
+    assert np.allclose(result.C, A.T @ uv.C @ A)
+
+
+def test_uvector_dot():
+    uv = uVector([1.0, 2.0], np.diag([0.01, 0.04]))
+    w  = np.array([3.0, 4.0])
+    us = uv.dot(w)
+    assert isinstance(us, uScalar)
+    assert math.isclose(us.s,   11.0)              # 3*1 + 4*2
+    assert math.isclose(us.var, 9.0 * 0.01 + 16.0 * 0.04)
+
+
+def test_uvector_norm():
+    uv = uVector([3.0, 4.0], np.diag([0.01, 0.04]))
+    us = uv.norm()
+    assert isinstance(us, uScalar)
+    assert math.isclose(us.s, 5.0)
+    u = np.array([0.6, 0.8])                       # unit vector [3,4]/5
+    assert math.isclose(us.var, float(u @ uv.C @ u))
 
 
 # ── uvct3 ────────────────────────────────────────────────────────────────────
@@ -97,6 +291,16 @@ def test_urot_default_zero_covariance():
     assert np.allclose(uR.C, np.zeros((3, 3)))
 
 
+def test_urot_from_axis_uscalar():
+    """uRot('z', uScalar) should give same result as uRot('z', uVector([θ],[[var]]))."""
+    angle = math.pi / 2
+    var   = 1e-4
+    uR_scalar = uRot('z', uScalar(angle, var))
+    uR_vector = uRot('z', uVector([angle], [[var]]))
+    np.testing.assert_allclose(uR_scalar.matrix, uR_vector.matrix, atol=1e-12)
+    np.testing.assert_allclose(uR_scalar.C,      uR_vector.C,      atol=1e-14)
+
+
 def test_urot_from_axis_uangle():
     uangle = uVector([math.pi / 2], [[1e-4]])
     uR = uRot('z', uangle)
@@ -130,6 +334,17 @@ def test_urot_from_uaxis_uangle():
     # Nominal rotation should match the nominal angle
     expected = Rot(axis='z', angle=math.pi / 4)
     np.testing.assert_allclose(uR.matrix, expected.matrix, atol=1e-7)
+
+
+def test_urot_from_uaxis_uscalar():
+    """uRot(uAxis, uScalar) should match uRot(uAxis, uVector([θ],[[var]]))."""
+    angle  = math.pi / 4
+    var    = 1e-4
+    uaxis  = uVector([0.0, 0.0, 1.0], _cov3(1e-3))
+    uR_sc  = uRot(uaxis, uScalar(angle, var))
+    uR_vec = uRot(uaxis, uVector([angle], [[var]]))
+    np.testing.assert_allclose(uR_sc.matrix, uR_vec.matrix, atol=1e-12)
+    np.testing.assert_allclose(uR_sc.C,      uR_vec.C,      atol=1e-14)
 
 
 def test_urot_times_point():

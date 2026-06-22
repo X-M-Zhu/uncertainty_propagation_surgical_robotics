@@ -52,7 +52,7 @@ class Convention(str, Enum):
         C_left  = Ad(F_nom)     @ C_right @ Ad(F_nom)^T
         C_right = Ad(F_nom^-1)  @ C_left  @ Ad(F_nom^-1)^T
 
-    Use .to_right_perturbation() / .to_left_perturbation() to convert.
+    Use .as_right_convention() / .as_left_convention() to convert.
     Use .convention to query which one you have.
     """
     RIGHT = "right"
@@ -109,14 +109,14 @@ class UncertainTransform:
         return UncertainTransform(np.eye(4, dtype=np.float64), C)
 
     @classmethod
-    def from_frame(cls, frame: Frame, C: np.ndarray | None = None) -> "UncertainTransform":
+    def from_nominal_frame(cls, frame: Frame, C: np.ndarray | None = None) -> "UncertainTransform":
         r"""
-        Construct an UncertainTransform from a spatial_math.Frame object.
+        Construct an UncertainTransform from a nominal Frame object and an optional covariance.
 
         Parameters
         ----------
         frame : Frame
-            Nominal rigid-body frame (rotation + translation).
+            The *nominal* rigid-body frame (rotation + translation).
         C : ndarray, optional, shape (6,6)
             Covariance of the pose perturbation. Defaults to zero.
 
@@ -131,9 +131,9 @@ class UncertainTransform:
             C = np.zeros((6, 6), dtype=np.float64)
         return cls(F, C)
 
-    def to_frame(self) -> Frame:
+    def get_nominal_frame(self) -> Frame:
         r"""
-        Convert the nominal transform to a spatial_math.Frame object.
+        Extract the nominal transform as a Frame object.
 
         Returns
         -------
@@ -154,80 +154,137 @@ class UncertainTransform:
         Nominal inverse:
             F_nom^{-1} = inv_se3(F_nom)
 
-        Covariance mapping:
-            Under the CIS I right-perturbation model, the inverse perturbation is
-            mapped by the adjoint of the nominal transform. Using a
-            first-order approximation:
+        Covariance mapping (RIGHT convention):
+            T_true = F_nom @ Exp(eta_R)
+            T_true^{-1} = Exp(-Ad_{F_nom} eta_R) @ F_nom^{-1}
+                        = F_nom^{-1} @ Exp(-eta_R)  [re-expressed as right perturbation]
+            Proof: Exp(-eta_R) = Exp(Ad_{F_nom^{-1}}(-Ad_{F_nom} eta_R))
+            =>  C_inv ≈ Ad_{F_nom} C Ad_{F_nom}^T
 
-                C_inv ≈ Ad_{F_nom} C Ad_{F_nom}^T
+        Covariance mapping (LEFT convention):
+            T_true = Exp(eta_L) @ F_nom
+            T_true^{-1} = F_nom^{-1} @ Exp(-eta_L)
+                        = Exp(-Ad_{F_nom^{-1}} eta_L) @ F_nom^{-1}
+            =>  C_inv ≈ Ad_{F_nom^{-1}} C Ad_{F_nom^{-1}}^T
 
         Returns
         -------
         UncertainTransform
-            Inverse uncertain transform.
+            Inverse uncertain transform, same convention as self.
         """
-        if self.convention != Convention.RIGHT:
-            raise ValueError(
-                "inv() requires right-convention covariance. "
-                "Call .to_right_perturbation() first."
-            )
         F_inv = inv_se3(self.F_nom)
-        Ad_F = adjoint_se3(self.F_nom)
-        C_inv = Ad_F @ self.C @ Ad_F.T
-        return UncertainTransform(F_inv, C_inv)
+        if self.convention == Convention.RIGHT:
+            Ad = adjoint_se3(self.F_nom)
+        else:
+            Ad = adjoint_se3(F_inv)
+        C_inv = Ad @ self.C @ Ad.T
+        return UncertainTransform(F_inv, C_inv, self.convention)
 
-    def compose(self, other: "UncertainTransform", assume_independent: bool = True) -> "UncertainTransform":
+    # ── private composition subroutines ──────────────────────────────────────
+
+    @staticmethod
+    def _compose_rr(
+        F_ab: Array, C_ab: Array,
+        F_bc: Array, C_bc: Array,
+    ) -> "tuple[Array, Array, Convention]":
+        r"""RIGHT @ RIGHT → RIGHT.
+
+        T_ab = F_ab @ Exp(eta_ab),  T_bc = F_bc @ Exp(eta_bc)
+        T_ac = F_ac @ Exp(Ad(F_bc^{-1}) eta_ab + eta_bc)
+
+        C_ac = Ad(F_bc^{-1}) C_ab Ad(F_bc^{-1})^T + C_bc
+        """
+        F_ac = F_ab @ F_bc
+        Ad_inv = adjoint_se3(inv_se3(F_bc))
+        C_ac = Ad_inv @ C_ab @ Ad_inv.T + C_bc
+        return F_ac, C_ac, Convention.RIGHT
+
+    @staticmethod
+    def _compose_ll(
+        F_ab: Array, C_ab: Array,
+        F_bc: Array, C_bc: Array,
+    ) -> "tuple[Array, Array, Convention]":
+        r"""LEFT @ LEFT → LEFT.
+
+        T_ab = Exp(eta_ab) @ F_ab,  T_bc = Exp(eta_bc) @ F_bc
+        T_ac = Exp(eta_ab + Ad(F_ab) eta_bc) @ F_ac
+
+        C_ac = C_ab + Ad(F_ab) C_bc Ad(F_ab)^T
+        """
+        F_ac = F_ab @ F_bc
+        Ad_ab = adjoint_se3(F_ab)
+        C_ac = C_ab + Ad_ab @ C_bc @ Ad_ab.T
+        return F_ac, C_ac, Convention.LEFT
+
+    @staticmethod
+    def _compose_rl(
+        F_ab: Array, C_ab: Array,
+        F_bc: Array, C_bc: Array,
+    ) -> "tuple[Array, Array, Convention]":
+        r"""RIGHT @ LEFT → RIGHT.
+
+        T_ab = F_ab @ Exp(eta_R),  T_bc = Exp(eta_L) @ F_bc
+        T_ac ≈ F_ab @ Exp(eta_R + eta_L) @ F_bc
+             = F_ac @ Exp(Ad(F_bc^{-1})(eta_R + eta_L))
+
+        C_ac = Ad(F_bc^{-1}) (C_ab + C_bc) Ad(F_bc^{-1})^T
+        """
+        F_ac = F_ab @ F_bc
+        Ad_inv = adjoint_se3(inv_se3(F_bc))
+        C_ac = Ad_inv @ (C_ab + C_bc) @ Ad_inv.T
+        return F_ac, C_ac, Convention.RIGHT
+
+    @staticmethod
+    def _compose_lr(
+        F_ab: Array, C_ab: Array,
+        F_bc: Array, C_bc: Array,
+    ) -> "tuple[Array, Array, Convention]":
+        r"""LEFT @ RIGHT → RIGHT.
+
+        T_ab = Exp(eta_L) @ F_ab,  T_bc = F_bc @ Exp(eta_R)
+        T_ac = Exp(eta_L) @ F_ac @ Exp(eta_R)
+             = F_ac @ Exp(Ad(F_ac^{-1}) eta_L + eta_R)
+
+        C_ac = Ad(F_ac^{-1}) C_ab Ad(F_ac^{-1})^T + C_bc
+        """
+        F_ac = F_ab @ F_bc
+        Ad_ac_inv = adjoint_se3(inv_se3(F_ac))
+        C_ac = Ad_ac_inv @ C_ab @ Ad_ac_inv.T + C_bc
+        return F_ac, C_ac, Convention.RIGHT
+
+    # ── compose dispatcher ────────────────────────────────────────────────────
+
+    _COMPOSE_DISPATCH = None  # populated after class definition
+
+    def compose(self, other: "UncertainTransform") -> "UncertainTransform":
         r"""
-        Compose two uncertain transforms (first-order propagation).
+        Compose two uncertain transforms with first-order uncertainty propagation.
 
-        Let:
-            self  = F_ab = {F_nom,ab, C_ab}
-            other = F_bc = {F_nom,bc, C_bc}
+        Dispatches to one of four subroutines based on the convention flags of
+        self and other:
 
-        Nominal composition:
-            F_nom,ac = F_nom,ab ∘ F_nom,bc  (matrix product)
+            self \ other | RIGHT           | LEFT
+            -------------|----------------|----------------
+            RIGHT        | _compose_rr    | _compose_rl
+            LEFT         | _compose_lr    | _compose_ll
 
-        First-order covariance propagation (independent edges):
-            C_ac ≈ Ad_{F_nom,bc^{-1}} C_ab Ad_{F_nom,bc^{-1}}^T + C_bc
-
-        This is the core propagation rule used throughout the framework.
+        Mixed conventions (RL, LR) always return RIGHT convention.
+        Matching conventions return the same convention as the inputs.
 
         Parameters
         ----------
         other : UncertainTransform
             The transform to compose on the right.
-        assume_independent : bool
-            If True, assumes perturbations are independent (default).
-            (Cross-covariances are not tracked in the current scope.)
 
         Returns
         -------
         UncertainTransform
             Composed uncertain transform.
         """
-        if self.convention != Convention.RIGHT:
-            raise ValueError(
-                "compose() requires right-convention covariance on self. "
-                "Call .to_right_perturbation() first."
-            )
-        if other.convention != Convention.RIGHT:
-            raise ValueError(
-                "compose() requires right-convention covariance on other. "
-                "Call other.to_right_perturbation() first."
-            )
-        F_ab = self.F_nom
-        F_bc = other.F_nom
-        F_ac = F_ab @ F_bc
-
-        Ad_Fbc_inv = adjoint_se3(inv_se3(F_bc))
-
-        # Current scope: independent edges; cross-covariances not tracked
-        if assume_independent:
-            C_ac = Ad_Fbc_inv @ self.C @ Ad_Fbc_inv.T + other.C
-        else:
-            C_ac = Ad_Fbc_inv @ self.C @ Ad_Fbc_inv.T + other.C
-
-        return UncertainTransform(F_ac, C_ac)
+        fn = UncertainTransform._COMPOSE_DISPATCH[(self.convention, other.convention)]
+        F_ac, C_ac, conv = fn(self.F_nom, self.C, other.F_nom, other.C)
+        C_ac = 0.5 * (C_ac + C_ac.T)
+        return UncertainTransform(F_ac, C_ac, conv)
 
     def __matmul__(self, other: "UncertainTransform") -> "UncertainTransform":
         r"""
@@ -237,9 +294,9 @@ class UncertainTransform:
         return self.compose(other)
 
     @classmethod
-    def from_left_perturbation(cls, F_nom: Array, C_left: Array) -> "UncertainTransform":
+    def from_left_covariance(cls, F_nom: Array, C_left: Array) -> "UncertainTransform":
         r"""
-        Construct an UncertainTransform from a *left*-perturbation covariance.
+        Construct an UncertainTransform from a covariance given in the left (world-frame) convention.
 
         Left model:   T_true = Exp(eta_L) * F_nom
         Right model:  T_true = F_nom      * Exp(eta_R)
@@ -251,20 +308,19 @@ class UncertainTransform:
 
         Use this when an external source (another library, a sensor driver,
         a paper that uses the world-frame convention) provides a covariance in
-        the left-perturbation convention and you need to feed it into this
-        right-perturbation framework.
+        the left convention and you need to feed it into this right-convention framework.
 
         Parameters
         ----------
         F_nom : array-like, shape (4,4)
             Nominal SE(3) transform.
         C_left : array-like, shape (6,6)
-            Covariance expressed in the *left*-perturbation convention.
+            Covariance expressed in the left (world-frame) convention.
 
         Returns
         -------
         UncertainTransform
-            Same nominal transform, covariance converted to right-perturbation.
+            Same nominal transform, covariance converted to right convention.
         """
         F_nom  = np.asarray(F_nom,  dtype=np.float64)
         C_left = np.asarray(C_left, dtype=np.float64)
@@ -272,11 +328,11 @@ class UncertainTransform:
         C_right = Ad_inv @ C_left @ Ad_inv.T
         return cls(F_nom, C_right)
 
-    def to_right_perturbation(self) -> "UncertainTransform":
+    def as_right_convention(self) -> "UncertainTransform":
         r"""
-        Return this transform with covariance in right-perturbation convention.
+        Return this transform with covariance in the right (body-frame) convention.
 
-        If already RIGHT: no-op.
+        If already RIGHT: no-op (returns a copy).
         If LEFT: converts C_left → C_right via Ad(F^{-1}).
 
         Returns
@@ -290,11 +346,11 @@ class UncertainTransform:
         C_right = Ad_inv @ self.C @ Ad_inv.T
         return UncertainTransform(self.F_nom, 0.5 * (C_right + C_right.T), Convention.RIGHT)
 
-    def to_left_perturbation(self) -> "UncertainTransform":
+    def as_left_convention(self) -> "UncertainTransform":
         r"""
-        Return this transform with covariance in left-perturbation convention.
+        Return this transform with covariance in the left (world-frame) convention.
 
-        If already LEFT: no-op.
+        If already LEFT: no-op (returns a copy).
         If RIGHT: converts C_right → C_left via Ad(F_nom).
 
         Returns
@@ -308,9 +364,9 @@ class UncertainTransform:
         C_left = Ad @ self.C @ Ad.T
         return UncertainTransform(self.F_nom, 0.5 * (C_left + C_left.T), Convention.LEFT)
 
-    def transform_point(self, p: Array, Cp: Array | None = None) -> tuple[Array, Array]:
+    def apply_to_point(self, p: Array, Cp: Array | None = None) -> tuple[Array, Array]:
         r"""
-        Transform a 3D point and propagate uncertainty using CIS I Jacobians.
+        Apply this uncertain transform to a 3D point and propagate uncertainty using CIS I Jacobians.
 
         Nominal point transform:
             p'_nom = R p + t
@@ -400,3 +456,12 @@ class UncertainTransform:
 
         object.__setattr__(self, "F_nom", F)
         object.__setattr__(self, "C", C)
+
+
+# Populate the dispatch table now that all subroutines are defined.
+UncertainTransform._COMPOSE_DISPATCH = {
+    (Convention.RIGHT, Convention.RIGHT): UncertainTransform._compose_rr,
+    (Convention.LEFT,  Convention.LEFT):  UncertainTransform._compose_ll,
+    (Convention.RIGHT, Convention.LEFT):  UncertainTransform._compose_rl,
+    (Convention.LEFT,  Convention.RIGHT): UncertainTransform._compose_lr,
+}

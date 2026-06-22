@@ -238,7 +238,7 @@ class GeometricNetwork:
         if isinstance(T_src_dst, uFrame):
             T_src_dst = T_src_dst.to_uncertain_transform()
         elif isinstance(T_src_dst, Frame):
-            T_src_dst = UncertainTransform.from_frame(T_src_dst)
+            T_src_dst = UncertainTransform.from_nominal_frame(T_src_dst)
             is_certain = True
 
         if edge_type not in _VALID_EDGE_TYPES:
