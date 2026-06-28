@@ -163,12 +163,12 @@ def test_compose_rl_returns_right_convention():
     assert np.all(np.linalg.eigvalsh(result.C) >= -1e-14)
 
 
-def test_compose_lr_returns_right_convention():
-    """LEFT @ RIGHT must return RIGHT convention."""
+def test_compose_lr_returns_left_convention():
+    """LEFT @ RIGHT must return LEFT convention."""
     U1 = _make_ut(0.1, [0.1, 0, 0], 1e-6, Convention.LEFT)
     U2 = _make_ut(-0.05, [0, 0.1, 0], 2e-6, Convention.RIGHT)
     result = U1.compose(U2)
-    assert result.convention == Convention.RIGHT
+    assert result.convention == Convention.LEFT
     assert np.allclose(result.C, result.C.T)
     assert np.all(np.linalg.eigvalsh(result.C) >= -1e-14)
 

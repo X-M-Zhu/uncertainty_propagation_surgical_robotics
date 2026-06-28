@@ -239,18 +239,18 @@ class UncertainTransform:
         F_ab: Array, C_ab: Array,
         F_bc: Array, C_bc: Array,
     ) -> "tuple[Array, Array, Convention]":
-        r"""LEFT @ RIGHT → RIGHT.
+        r"""LEFT @ RIGHT → LEFT.
 
         T_ab = Exp(eta_L) @ F_ab,  T_bc = F_bc @ Exp(eta_R)
         T_ac = Exp(eta_L) @ F_ac @ Exp(eta_R)
-             = F_ac @ Exp(Ad(F_ac^{-1}) eta_L + eta_R)
+             = Exp(eta_L + Ad(F_ac) eta_R) @ F_ac
 
-        C_ac = Ad(F_ac^{-1}) C_ab Ad(F_ac^{-1})^T + C_bc
+        C_ac = C_ab + Ad(F_ac) C_bc Ad(F_ac)^T
         """
         F_ac = F_ab @ F_bc
-        Ad_ac_inv = adjoint_se3(inv_se3(F_ac))
-        C_ac = Ad_ac_inv @ C_ab @ Ad_ac_inv.T + C_bc
-        return F_ac, C_ac, Convention.RIGHT
+        Ad_ac = adjoint_se3(F_ac)
+        C_ac = C_ab + Ad_ac @ C_bc @ Ad_ac.T
+        return F_ac, C_ac, Convention.LEFT
 
     # ── compose dispatcher ────────────────────────────────────────────────────
 
@@ -268,8 +268,8 @@ class UncertainTransform:
             RIGHT        | _compose_rr    | _compose_rl
             LEFT         | _compose_lr    | _compose_ll
 
-        Mixed conventions (RL, LR) always return RIGHT convention.
-        Matching conventions return the same convention as the inputs.
+        The result convention always follows the first (left) operand:
+        RR → RIGHT, LL → LEFT, RL → RIGHT, LR → LEFT.
 
         Parameters
         ----------
