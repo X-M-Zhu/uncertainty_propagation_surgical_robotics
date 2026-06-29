@@ -1,24 +1,29 @@
 # Author: X.M. Christine Zhu
 
 """
-Experiment 1 — Analysis: drill fixed, only Anatomy moves.
+Experiment 1 — Analysis: Anatomy fixed, drill moves.
 
-For each Anatomy position this script shows:
-  - C_TA  : empirical covariance of Anatomy in tracker frame
+For each drill position this script shows:
+  - C_TA  : empirical covariance of the drill in tracker frame (A = drill here)
   - C_AB  : empirical covariance of relative pose T_AB = inv(T_TA) @ T_TB
   - C_AB_pred : C_AB predicted by propagating C_TA through inv() (C_TB negligible)
   - Frobenius error between C_AB_pred and C_AB_empirical
 
+Distance from the tracker to the drill is computed automatically from the
+empirical mean pose (no manual measurement needed). The angle_note field is
+a free-form label you optionally typed during collection — purely for your
+own reference, not used numerically.
+
 Key result
 ----------
-As Anatomy moves further or more obliquely from the tracker, σ_TA grows.
+As the drill moves further from the tracker, σ_TA grows.
 The predicted σ_AB should grow in the same proportion — confirming that the
-adjoint-based propagation formula captures how Anatomy's positional uncertainty
-feeds into the relative transform uncertainty.
+adjoint-based propagation formula captures how the drill's positional
+uncertainty feeds into the relative transform uncertainty.
 
 Produces
 --------
-  results_fixed_drill/fig_sigma_vs_anatomy_position.png
+  results_fixed_drill/fig_sigma_vs_drill_distance.png
   results_fixed_drill/per_position_report.txt
 """
 
@@ -48,8 +53,8 @@ def analyse_position(pos_dir: pathlib.Path) -> dict:
     samples_A, samples_B = samples_A[:n], samples_B[:n]
 
     # Empirical covariances
-    mean_A, C_A = se3_empirical_stats(samples_A)   # C of T_TA
-    mean_B, C_B = se3_empirical_stats(samples_B)   # C of T_TB (drill, fixed — should be small)
+    mean_A, C_A = se3_empirical_stats(samples_A)   # C of T_TA (drill, moved)
+    mean_B, C_B = se3_empirical_stats(samples_B)   # C of T_TB (Anatomy, fixed — should be small)
 
     # Empirical relative pose covariance from simultaneous pairs
     rel_samples  = np.array([inv_se3(samples_A[i]) @ samples_B[i] for i in range(n)])
@@ -81,24 +86,24 @@ def analyse_position(pos_dir: pathlib.Path) -> dict:
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Load position metadata
+    # Load position metadata (label, optional free-form angle_note)
     meta_path = DATA_DIR / "positions.txt"
     if not meta_path.exists():
         raise FileNotFoundError(f"Run collect.py first. Expected: {meta_path}")
     rows = meta_path.read_text().strip().split("\n")[1:]
     positions = []
     for row in rows:
-        label, dist, angle = row.split(",")
-        positions.append({"label": label.strip(),
-                          "distance_mm": float(dist),
-                          "angle_deg":   float(angle)})
+        parts = row.split(",", 1)
+        label = parts[0].strip()
+        angle_note = parts[1].strip() if len(parts) > 1 else ""
+        positions.append({"label": label, "angle_note": angle_note})
 
     # Per-position analysis
     records = []
-    print(f"\n{'Label':<10} {'Dist(mm)':>9} {'Ang(°)':>7} "
+    print(f"\n{'Label':<10} {'Dist(mm)':>9} {'Note':<14} "
           f"{'σ_TA_t(mm)':>12} {'σ_AB_emp(mm)':>14} {'σ_AB_pred(mm)':>15} "
           f"{'Frob err':>10} {'Rel err(%)':>11}")
-    print("─" * 95)
+    print("─" * 100)
 
     report_lines = []
     for pos in positions:
@@ -108,47 +113,48 @@ def main():
             continue
 
         res = analyse_position(pos_dir)
-        sA  = res["summary_A"]
+        sA  = res["summary_A"]    # distance_mm computed automatically from the data
         sAB_emp  = summary_stats(res["mean_AB"], res["C_AB_emp"])
         sAB_pred = summary_stats(res["mean_AB"], res["C_AB_pred"])
 
-        print(f"{pos['label']:<10} {pos['distance_mm']:>9.0f} {pos['angle_deg']:>7.0f} "
+        print(f"{pos['label']:<10} {sA['distance_mm']:>9.0f} {pos['angle_note']:<14} "
               f"{sA['sigma_trans_mm']:>12.4f} "
               f"{sAB_emp['sigma_trans_mm']:>14.4f} "
               f"{sAB_pred['sigma_trans_mm']:>15.4f} "
               f"{res['frob_error']:>10.6f} "
               f"{res['rel_error_pct']:>10.2f}%")
 
-        records.append({**pos, **res})
+        records.append({**pos, **res, "distance_mm": sA["distance_mm"]})
         report_lines.append(
-            f"{pos['label']}: σ_TA_trans={sA['sigma_trans_mm']:.4f} mm  "
+            f"{pos['label']} (dist={sA['distance_mm']:.0f} mm, note='{pos['angle_note']}'): "
+            f"σ_TA_trans={sA['sigma_trans_mm']:.4f} mm  "
             f"σ_AB_emp={sAB_emp['sigma_trans_mm']:.4f} mm  "
             f"σ_AB_pred={sAB_pred['sigma_trans_mm']:.4f} mm  "
             f"frob={res['frob_error']:.6f}  rel={res['rel_error_pct']:.2f}%"
         )
 
-    # ── Plot: σ_TA and σ_AB vs Anatomy distance ──────────────────────────────
-    dist_records = [r for r in records if r["angle_deg"] == 0]
-    if len(dist_records) >= 2:
-        dists       = [r["distance_mm"] for r in dist_records]
-        sA_trans    = [summary_stats(r["mean_AB"], r["C_TA"])["sigma_trans_mm"]
-                       for r in dist_records]
-        sAB_emp_t   = [summary_stats(r["mean_AB"], r["C_AB_emp"])["sigma_trans_mm"]
-                       for r in dist_records]
-        sAB_pred_t  = [summary_stats(r["mean_AB"], r["C_AB_pred"])["sigma_trans_mm"]
-                       for r in dist_records]
+    # ── Plot: σ_TA and σ_AB vs drill distance (auto-computed, no angle grouping) ──
+    if len(records) >= 2:
+        order       = sorted(range(len(records)), key=lambda i: records[i]["distance_mm"])
+        dists       = [records[i]["distance_mm"] for i in order]
+        sA_trans    = [summary_stats(records[i]["mean_AB"], records[i]["C_TA"])["sigma_trans_mm"]
+                       for i in order]
+        sAB_emp_t   = [summary_stats(records[i]["mean_AB"], records[i]["C_AB_emp"])["sigma_trans_mm"]
+                       for i in order]
+        sAB_pred_t  = [summary_stats(records[i]["mean_AB"], records[i]["C_AB_pred"])["sigma_trans_mm"]
+                       for i in order]
 
         fig, ax = plt.subplots(figsize=(8, 5))
-        ax.plot(dists, sA_trans,   "o--", color="gray",      label="σ_TA (Anatomy direct)")
+        ax.plot(dists, sA_trans,   "o--", color="gray",      label="σ_TA (drill direct)")
         ax.plot(dists, sAB_emp_t,  "o-",  color="tomato",    label="σ_AB empirical")
         ax.plot(dists, sAB_pred_t, "s-",  color="steelblue", label="σ_AB predicted")
-        ax.set_xlabel("Anatomy distance from tracker (mm)")
+        ax.set_xlabel("Drill distance from tracker (mm, auto-computed)")
         ax.set_ylabel("σ translation (mm)")
-        ax.set_title("Fixed-drill experiment: relative pose uncertainty vs Anatomy position")
+        ax.set_title("Fixed-Anatomy experiment: relative pose uncertainty vs drill distance")
         ax.legend()
         ax.grid(True, alpha=0.3)
         fig.tight_layout()
-        out = RESULTS_DIR / "fig_sigma_vs_anatomy_position.png"
+        out = RESULTS_DIR / "fig_sigma_vs_drill_distance.png"
         fig.savefig(str(out), dpi=150)
         print(f"\nSaved → {out}")
 

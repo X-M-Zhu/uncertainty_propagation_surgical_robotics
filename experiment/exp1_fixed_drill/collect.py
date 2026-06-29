@@ -1,31 +1,37 @@
 # Author: X.M. Christine Zhu
 
 """
-Experiment 1 — Data collection: drill fixed, only Anatomy moves.
+Experiment 1 — Data collection: Anatomy fixed, drill moves.
 
 Mentor's setup
 --------------
-The Anspoch_drill rigid body is placed on the table and NEVER MOVED.
-Only the Anatomy body is moved to different positions.
+The Anatomy rigid body is placed on the table and NEVER MOVED.
+Only the Anspoch_drill body is moved to different positions.
 
 What this tests
 ---------------
-At each Anatomy position the tracker noise C_TA changes (varies with distance
-and angle from the camera). The relative transform T_AB = inv(T_TA) @ T_TB
-inherits that uncertainty. The question is: does our propagation formula
-correctly predict the empirical spread in T_AB as Anatomy moves around?
+At each drill position the tracker noise C_TA (A = drill here) changes
+(varies with distance and angle from the camera). The relative transform
+T_AB = inv(T_TA) @ T_TB inherits that uncertainty. The question is: does our
+propagation formula correctly predict the empirical spread in T_AB as the
+drill moves around?
 
-Because the drill is fixed, C_TB (direct measurement of the drill) stays
+Because Anatomy is fixed, C_TB (direct measurement of Anatomy) stays
 constant — it is just the tracker's intrinsic noise at that one location.
 This gives a stable, independent ground-truth against which to compare.
 
 Procedure
 ---------
-1. Place Anspoch_drill on the table.  DO NOT TOUCH IT for the entire session.
-2. For each position in ANATOMY_POSITIONS, move the Anatomy body there and
-   collect N_SAMPLES simultaneous pairs (Anatomy, Drill).
-3. Run analyze.py (shared with collect.py results) to compare predicted vs
-   empirical covariance at each Anatomy position.
+1. Place Anatomy on the table.  DO NOT TOUCH IT for the entire session.
+2. Move the drill to a new position, collect N_SAMPLES simultaneous pairs
+   (drill, Anatomy), and repeat for as many positions as you like.
+   No manual distance/angle measurement needed — actual tracker-to-drill
+   distance is computed automatically from the data in analyze.py. You may
+   optionally type a free-form note (e.g. "side", "far corner") per position
+   purely for your own reference.
+3. Type 'done' instead of moving to a new position when finished.
+4. Run analyze.py to compare predicted vs empirical covariance at each
+   drill position.
 
 Data layout
 -----------
@@ -33,7 +39,7 @@ data_fixed_drill/
   pos_01/  bodyA.csv   bodyB.csv
   pos_02/  bodyA.csv   bodyB.csv
   ...
-  positions.txt   — label, distance_mm, angle_deg per row
+  positions.txt   — label, angle_note per row (distance is auto-computed)
 """
 
 import sys
@@ -49,22 +55,10 @@ from utils.se3_stats import save_poses_csv, se3_empirical_stats
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-BODY_A = "Anatomy"        # moved to different positions
-BODY_B = "Anspoch_drill"  # FIXED — do not move during the session
+BODY_A = "Anspoch_drill"  # moved to different positions
+BODY_B = "Anatomy"        # FIXED — do not move during the session
 
-N_SAMPLES = 300           # simultaneous pairs per Anatomy position
-
-# Describe the Anatomy positions you will physically use.
-# Fill in approx distance (mm from tracker) and angle (deg from optical axis).
-ANATOMY_POSITIONS = [
-    {"label": "pos_01", "distance_mm": 500,  "angle_deg":  0},
-    {"label": "pos_02", "distance_mm": 700,  "angle_deg":  0},
-    {"label": "pos_03", "distance_mm": 900,  "angle_deg":  0},
-    {"label": "pos_04", "distance_mm": 1100, "angle_deg":  0},
-    {"label": "pos_05", "distance_mm": 700,  "angle_deg": 15},
-    {"label": "pos_06", "distance_mm": 700,  "angle_deg": 30},
-    {"label": "pos_07", "distance_mm": 700,  "angle_deg": 45},
-]
+N_SAMPLES = 300           # simultaneous pairs per drill position
 
 DATA_DIR = _HERE / "data_fixed_drill"
 
@@ -78,30 +72,42 @@ def main():
     tracker.connect()
     print("Tracker connected.\n")
     print("=" * 60)
-    print("IMPORTANT: Place the Anspoch_drill on the table NOW.")
+    print("IMPORTANT: Place Anatomy on the table NOW.")
     print("Do NOT move it again until the session is complete.")
     print("=" * 60)
-    input("\nPress Enter when the drill is placed and visible...")
+    input("\nPress Enter when Anatomy is placed and visible...")
 
-    # Verify drill is visible before starting
+    # Verify Anatomy is visible before starting
     try:
-        T_drill_ref = tracker.get_pose(BODY_B)
-        print(f"  Drill confirmed visible at t={T_drill_ref[:3, 3]} m\n")
+        T_anatomy_ref = tracker.get_pose(BODY_B)
+        print(f"  Anatomy confirmed visible at t={T_anatomy_ref[:3, 3]} m\n")
     except RuntimeError as e:
         print(f"ERROR: {e}")
         tracker.disconnect()
         return
 
-    meta_lines = ["label,distance_mm,angle_deg"]
+    meta_lines = ["label,angle_note"]
+    pos_index = 0
 
-    for pos in ANATOMY_POSITIONS:
-        label = pos["label"]
+    while True:
+        pos_index += 1
+        label = f"pos_{pos_index:02d}"
+
+        print(f"─── {label} ───")
+        cmd = input(
+            "  Move the drill to a new position, then press Enter "
+            "(or type 'done' to finish): "
+        ).strip().lower()
+        if cmd == "done":
+            break
+
+        angle_note = input(
+            "  Optional note about this position (e.g. 'side', 'far corner'), "
+            "or press Enter to skip: "
+        ).strip()
+
         pos_dir = DATA_DIR / label
         pos_dir.mkdir(exist_ok=True)
-
-        print(f"─── {label}  (distance={pos['distance_mm']} mm, "
-              f"angle={pos['angle_deg']} deg) ───")
-        input(f"  Move Anatomy to this position, then press Enter...")
 
         # Collect simultaneous pairs
         samples_A, samples_B = [], []
@@ -125,17 +131,19 @@ def main():
         save_poses_csv(str(pos_dir / "bodyA.csv"), samples_A)
         save_poses_csv(str(pos_dir / "bodyB.csv"), samples_B)
 
-        # Quick per-position summary
+        # Quick per-position summary (distance computed automatically from data)
         _, C_A = se3_empirical_stats(samples_A)
         _, C_B = se3_empirical_stats(samples_B)
         sA_rot   = np.degrees(np.sqrt(np.trace(C_A[:3, :3]) / 3.0))
         sA_trans = np.sqrt(np.trace(C_A[3:, 3:]) / 3.0) * 1000.0
         sB_rot   = np.degrees(np.sqrt(np.trace(C_B[:3, :3]) / 3.0))
         sB_trans = np.sqrt(np.trace(C_B[3:, 3:]) / 3.0) * 1000.0
-        print(f"  Anatomy: σ_rot={sA_rot:.4f}°  σ_trans={sA_trans:.4f} mm")
-        print(f"  Drill  : σ_rot={sB_rot:.4f}°  σ_trans={sB_trans:.4f} mm  (should be stable)\n")
+        dist_drill_mm = float(np.linalg.norm(samples_A[:, :3, 3].mean(axis=0))) * 1000.0
+        print(f"  Drill (moved) : σ_rot={sA_rot:.4f}°  σ_trans={sA_trans:.4f} mm"
+              f"  dist≈{dist_drill_mm:.0f} mm from tracker")
+        print(f"  Anatomy (fixed): σ_rot={sB_rot:.4f}°  σ_trans={sB_trans:.4f} mm  (should be stable)\n")
 
-        meta_lines.append(f"{label},{pos['distance_mm']},{pos['angle_deg']}")
+        meta_lines.append(f"{label},{angle_note}")
 
     (DATA_DIR / "positions.txt").write_text("\n".join(meta_lines))
     tracker.disconnect()
