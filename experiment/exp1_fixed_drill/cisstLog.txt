@@ -1,0 +1,5 @@
+M- cisst 1.3.0 (git: 1.3.0-5-g285e72e5)
+M- CISST_ROOT: /home/christine/catkin_ws/build/cisst
+M- cisst share: /home/christine/catkin_ws/build/cisst/share/cisst-1.3
+M- cmn_m: 1, cmn_kg: 1, CISST_USE_SI_UNITS is set to 1
+-W mtsEventReceiverBase: Creating local thread signal for event ConnectResult

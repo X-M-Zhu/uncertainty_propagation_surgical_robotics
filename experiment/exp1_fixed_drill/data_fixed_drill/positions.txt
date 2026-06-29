@@ -1,0 +1,13 @@
+label,angle_note
+pos_01,side
+pos_02,side
+pos_03,corner
+pos_04,corner
+pos_05,corner
+pos_06,corner
+pos_07,side
+pos_08,side
+pos_09,corner
+pos_10,side
+pos_11,corner
+pos_12,corner
