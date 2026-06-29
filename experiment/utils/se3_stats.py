@@ -77,7 +77,7 @@ def load_poses_csv(path: str) -> np.ndarray:
     Each row of the CSV is 16 floats: the 4×4 matrix read row by row.
     Returns ndarray of shape (N, 4, 4).
     """
-    data = np.loadtxt(path, delimiter=",")
+    data = np.loadtxt(path, delimiter=",", skiprows=1)
     if data.ndim == 1:
         data = data[np.newaxis, :]
     if data.shape[1] != 16:
