@@ -1,0 +1,12 @@
+pos_01 (dist=346 mm, note='side'): σ_TA_trans=0.1245 mm  σ_AB_emp=1.2858 mm  σ_AB_pred=1.2861 mm  frob=0.000000  rel=7.77%
+pos_02 (dist=160 mm, note='side'): σ_TA_trans=0.0533 mm  σ_AB_emp=1.1020 mm  σ_AB_pred=1.1019 mm  frob=0.000000  rel=10.08%
+pos_03 (dist=284 mm, note='corner'): σ_TA_trans=0.1019 mm  σ_AB_emp=1.2637 mm  σ_AB_pred=1.2640 mm  frob=0.000000  rel=5.18%
+pos_04 (dist=264 mm, note='corner'): σ_TA_trans=0.0997 mm  σ_AB_emp=0.8482 mm  σ_AB_pred=0.8486 mm  frob=0.000000  rel=9.71%
+pos_05 (dist=398 mm, note='corner'): σ_TA_trans=0.1591 mm  σ_AB_emp=1.1239 mm  σ_AB_pred=1.1241 mm  frob=0.000000  rel=10.08%
+pos_06 (dist=490 mm, note='corner'): σ_TA_trans=0.1891 mm  σ_AB_emp=1.5667 mm  σ_AB_pred=1.5674 mm  frob=0.000000  rel=6.75%
+pos_07 (dist=270 mm, note='side'): σ_TA_trans=0.0937 mm  σ_AB_emp=1.2374 mm  σ_AB_pred=1.2373 mm  frob=0.000001  rel=11.52%
+pos_08 (dist=176 mm, note='side'): σ_TA_trans=0.0582 mm  σ_AB_emp=1.1918 mm  σ_AB_pred=1.1921 mm  frob=0.000000  rel=8.68%
+pos_09 (dist=252 mm, note='corner'): σ_TA_trans=0.0781 mm  σ_AB_emp=1.2619 mm  σ_AB_pred=1.2621 mm  frob=0.000000  rel=6.25%
+pos_10 (dist=266 mm, note='side'): σ_TA_trans=0.0774 mm  σ_AB_emp=1.3203 mm  σ_AB_pred=1.3206 mm  frob=0.000001  rel=10.55%
+pos_11 (dist=300 mm, note='corner'): σ_TA_trans=0.1130 mm  σ_AB_emp=1.2237 mm  σ_AB_pred=1.2239 mm  frob=0.000000  rel=9.92%
+pos_12 (dist=356 mm, note='corner'): σ_TA_trans=0.1300 mm  σ_AB_emp=1.2609 mm  σ_AB_pred=1.2608 mm  frob=0.000000  rel=8.17%
