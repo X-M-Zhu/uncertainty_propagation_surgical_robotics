@@ -42,7 +42,8 @@ sys.path.insert(0, str(_EXP))
 
 from utils.se3_stats import load_poses_csv
 
-PIVOT_DIR = _HERE / "data_fixed_drill" / "pivot_cal"
+PIVOT_DIR  = _HERE / "data_fixed_drill" / "pivot_cal"
+SHARED_CAL = _EXP / "shared_cal"
 
 
 def solve_pivot(samples: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
@@ -99,6 +100,11 @@ def main():
     out_path = PIVOT_DIR / "tip_offset.json"
     out_path.write_text(json.dumps(out, indent=2))
     print(f"\nSaved → {out_path}")
+
+    SHARED_CAL.mkdir(parents=True, exist_ok=True)
+    shared_path = SHARED_CAL / "tip_offset.json"
+    shared_path.write_text(json.dumps(out, indent=2))
+    print(f"Saved → {shared_path}  (shared across experiments)")
 
     if rms_residual * 1000.0 > 1.0:
         print(

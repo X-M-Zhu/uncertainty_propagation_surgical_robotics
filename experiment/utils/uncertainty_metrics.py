@@ -14,6 +14,34 @@ ROT_BLOCK = slice(0, 3)
 TRANS_BLOCK = slice(3, 6)
 
 
+def tip_point_covariance(mean_T: np.ndarray, C: np.ndarray,
+                         p_tip_local: np.ndarray) -> np.ndarray:
+    """
+    Propagate SE(3) covariance C of a transform T to 3×3 tip position covariance.
+
+    With right-mult perturbation T_true = T_nom @ Exp([α; ε]):
+        Δq ≈ [-R·skew(p_tip), R] · [α; ε]
+        C_tip = J @ C @ J^T          (3×3)
+
+    The result is the covariance of the tip point expressed in the frame that
+    T maps *into* (e.g. if T is drill→Anatomy, the tip covariance is in the
+    Anatomy frame).
+
+    Parameters
+    ----------
+    mean_T     : (4, 4) — nominal transform
+    C          : (6, 6) — SE(3) covariance, [α; ε] (rotation-first) ordering
+    p_tip_local : (3,)  — tip offset in the source frame of T (metres)
+    """
+    R = mean_T[:3, :3]
+    v = p_tip_local
+    skew_p = np.array([[0, -v[2], v[1]],
+                       [v[2],  0, -v[0]],
+                       [-v[1], v[0],  0]])
+    J = np.hstack([-R @ skew_p, R])   # 3×6
+    return J @ C @ J.T
+
+
 def block_compare(C_pred: np.ndarray, C_emp: np.ndarray, idx: slice) -> dict:
     """
     Compare a 3x3 diagonal block of predicted vs. empirical 6x6 covariance.

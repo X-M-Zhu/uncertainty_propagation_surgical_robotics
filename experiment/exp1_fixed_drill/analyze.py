@@ -40,38 +40,12 @@ sys.path.insert(0, str(_EXP))
 sys.path.insert(0, str(_ROOT / "src"))
 
 from utils.se3_stats import load_poses_csv, se3_empirical_stats, summary_stats
+from utils.uncertainty_metrics import tip_point_covariance
 from uncertainty_networks import UncertainTransform
 from uncertainty_networks.se3 import inv_se3
 
 DATA_DIR    = _HERE / "data_fixed_drill"
 RESULTS_DIR = _HERE / "results_fixed_drill"
-
-
-def _skew(v: np.ndarray) -> np.ndarray:
-    return np.array([[0, -v[2], v[1]],
-                     [v[2],  0, -v[0]],
-                     [-v[1], v[0],  0]])
-
-
-def tip_point_covariance(mean_drill: np.ndarray, C_drill: np.ndarray,
-                         p_tip_local: np.ndarray) -> np.ndarray:
-    """
-    Propagate SE(3) covariance C_drill of T_tracker_drill to 3×3 tip position
-    covariance in the tracker frame.
-
-    With right-mult perturbation T_true = T_nom @ Exp([α; ε]):
-        Δq ≈ [-R·skew(p_tip), R] · [α; ε]
-        C_tip = J @ C_drill @ J^T
-
-    Parameters
-    ----------
-    mean_drill  : (4, 4) — nominal drill pose in tracker frame
-    C_drill     : (6, 6) — SE(3) covariance, [α; ε] ordering
-    p_tip_local : (3,)   — tip offset in drill's own frame (metres)
-    """
-    R = mean_drill[:3, :3]
-    J = np.hstack([-R @ _skew(p_tip_local), R])   # 3×6
-    return J @ C_drill @ J.T
 
 
 def analyse_position(pos_dir: pathlib.Path, p_tip_local: np.ndarray = None) -> dict:
@@ -124,7 +98,7 @@ def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load optional pivot calibration result (from calibrate_pivot.py)
-    tip_json = DATA_DIR / "pivot_cal" / "tip_offset.json"
+    tip_json = _EXP / "shared_cal" / "tip_offset.json"
     p_tip_local = None
     if tip_json.exists():
         tip_data = json.loads(tip_json.read_text())

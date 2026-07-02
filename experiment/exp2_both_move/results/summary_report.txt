@@ -1,0 +1,5 @@
+cfg_01: σ_A=0.0174 mm  σ_B=0.0434 mm  σ_AB_emp=0.2751 mm  σ_AB_pred=0.2737 mm  frob=0.000000  rel=12.63%  σ_tip_emp=0.2877 mm  σ_tip_pred=0.2865 mm
+cfg_02: σ_A=0.0077 mm  σ_B=0.0461 mm  σ_AB_emp=0.2071 mm  σ_AB_pred=0.2100 mm  frob=0.000000  rel=19.53%  σ_tip_emp=0.2172 mm  σ_tip_pred=0.2201 mm
+cfg_03: σ_A=0.0166 mm  σ_B=0.0588 mm  σ_AB_emp=0.3537 mm  σ_AB_pred=0.3540 mm  frob=0.000000  rel=13.47%  σ_tip_emp=0.3658 mm  σ_tip_pred=0.3658 mm
+cfg_04: σ_A=0.0104 mm  σ_B=0.1183 mm  σ_AB_emp=0.4111 mm  σ_AB_pred=0.4065 mm  frob=0.000000  rel=6.32%  σ_tip_emp=0.4139 mm  σ_tip_pred=0.4106 mm
+cfg_05: σ_A=0.0104 mm  σ_B=0.0831 mm  σ_AB_emp=0.2939 mm  σ_AB_pred=0.2941 mm  frob=0.000000  rel=19.12%  σ_tip_emp=0.3016 mm  σ_tip_pred=0.3022 mm
