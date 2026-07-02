@@ -1,0 +1,5 @@
+cfg_01: rot σ_emp=0.0184deg σ_pred=0.0182deg rel_err=12.86%  trans σ_emp=0.2751mm σ_pred=0.2737mm rel_err=4.57%  cross_rel_err=16.35%  trans_axis_angle_deg=[2.41 1.72 2.04]  trans_sigma_ratio=[1.057 0.989 0.996]
+cfg_02: rot σ_emp=0.0144deg σ_pred=0.0144deg rel_err=17.41%  trans σ_emp=0.2071mm σ_pred=0.2100mm rel_err=7.99%  cross_rel_err=27.13%  trans_axis_angle_deg=[2.15 2.87 2.06]  trans_sigma_ratio=[1.019 1.08  0.984]
+cfg_03: rot σ_emp=0.0209deg σ_pred=0.0206deg rel_err=14.95%  trans σ_emp=0.3537mm σ_pred=0.3540mm rel_err=4.51%  cross_rel_err=17.10%  trans_axis_angle_deg=[1.24 1.03 1.61]  trans_sigma_ratio=[1.043 0.971 1.013]
+cfg_04: rot σ_emp=0.0224deg σ_pred=0.0230deg rel_err=5.24%  trans σ_emp=0.4111mm σ_pred=0.4065mm rel_err=3.50%  cross_rel_err=10.17%  trans_axis_angle_deg=[2.9  3.03 1.05]  trans_sigma_ratio=[1.003 0.961 0.997]
+cfg_05: rot σ_emp=0.0198deg σ_pred=0.0191deg rel_err=19.85%  trans σ_emp=0.2939mm σ_pred=0.2941mm rel_err=10.09%  cross_rel_err=22.86%  trans_axis_angle_deg=[4.26 3.87 4.72]  trans_sigma_ratio=[1.009 0.958 1.028]
