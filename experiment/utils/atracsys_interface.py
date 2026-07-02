@@ -1,64 +1,70 @@
 # Author: X.M. Christine Zhu
 
 """
-Atracsys FusionTrack interface — cisst/SAW backend.
+Atracsys FusionTrack interface — ROS subscriber backend.
 
-Uses cisst/sawAtracsysFusionTrack framework, the same stack
-used throughout the JHU surgical robotics lab.
+Architecture
+------------
+The Atracsys tracker is driven by a SEPARATE process: the `atracsys` ROS node
+from sawAtracsysFusionTrack's `ros/` package, typically launched under its
+own account, e.g.:
+
+    source /opt/ros/noetic/setup.bash
+    source /home/devel/catkin_ws/devel/setup.bash
+    rosrun atracsys atracsys -j /path/to/managerMarker_test.json
+
+That node owns the cisst/SAW component in-process (loads the SDK, talks to
+the hardware) and bridges every configured tool to a ROS topic via CRTK:
+
+    /atracsys/<body_name>/measured_cp      (geometry_msgs/PoseStamped, metres)
+
+This module does NOT load cisst/SAW components itself — it only subscribes
+to those topics. (An earlier version of this file instantiated
+mtsAtracsysFusionTrack in-process via the cisst Python bindings directly;
+that path deadlocked inside cisst's dynamic ComponentCreate RPC on this
+machine and is no longer used. Let the standalone `atracsys` node, which
+is known to work, own the hardware.)
 
 Before running any experiment
 ------------------------------
-1. Verify CONFIG_PATH below resolves to the correct managerMarker.json on
-   your machine.  The default assumes this repo and the sawAtracsysFusionTrack
-   repo sit side-by-side in the same Desktop folder.
+1. roscore must be running, and the `atracsys` ROS node above must already
+   be running and have the bodies you need visible to the camera.
 
-2. All geometry JSON files referenced in managerMarker.json must live in the
-   same directory as managerMarker.json (the tracker searches there by default).
+2. The body names passed to get_pose() and collect_samples() must exactly
+   match the "name" fields in the managerMarker_test.json that the running
+   `atracsys` node was launched with — NOT a path configured here. This
+   module has no notion of the JSON config; it only knows ROS topic names.
 
-3. The body names passed to get_pose() and collect_samples() must exactly
-   match the "name" fields in managerMarker.json.
+3. Do NOT set "reference" on any tool in that managerMarker_test.json. When
+   "reference" is set, measured_cp() returns the pose relative to the
+   reference body (T_AB), not in the tracker frame (T_TB). All experiment
+   scripts assume tracker-frame poses and compute relative transforms in
+   Python.
 
-4. Do NOT set "reference" on any tool in managerMarker.json.  When "reference"
-   is set, measured_cp() returns the pose relative to the reference body (T_AB),
-   not in the tracker frame (T_TB).  All experiment scripts assume tracker-frame
-   poses and compute relative transforms in Python.
-
-Body names currently in managerMarker.json
-------------------------------------------
-    "Anatomy"        — reference rigid body  (geometry_anatomy_reference_5_24.json, id=1)
-    "Anspoch_drill"  — drill rigid body      (geometry-drill.json, id=50001)
+Body names used by the experiments in this repo
+-------------------------------------------------
+    "Anatomy"        — reference rigid body
+    "Anspoch_drill"  — drill rigid body
 
 These two bodies cover all three experiments:
     "Anatomy"        — Exp 1 (moved by hand), Exp 2 (world link)
     "Anspoch_drill"  — Exp 1 (stays fixed), Exp 2 (chain end), Exp 3 (attach to Galen EE tip)
 """
 
-import os
-import time
 import numpy as np
 
-# ── Path to your tracker configuration file ───────────────────────────────────
-# Set the environment variable ATRACSYS_CONFIG_PATH to override on any machine.
-# Example (Linux lab computer):
-#   export ATRACSYS_CONFIG_PATH=/home/chris/catkin_ws/src/sawAtracsysFusionTrack/core/share/managerMarker.json
-# Example (Windows personal computer, if repo is on Desktop):
-#   $env:ATRACSYS_CONFIG_PATH = "C:\Users\Chris\OneDrive\Desktop\sawAtracsysFusionTrack\core\share\managerMarker.json"
-#
-# If the variable is not set, falls back to the Desktop sibling-folder layout.
-_DEFAULT_CONFIG = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "..", "..", "..",
-    "sawAtracsysFusionTrack", "core", "share",
-    "managerMarker.json"
-))
-CONFIG_PATH = os.environ.get("ATRACSYS_CONFIG_PATH", _DEFAULT_CONFIG)
+import rospy
+from geometry_msgs.msg import PoseStamped
+from scipy.spatial.transform import Rotation
 
-_TRACKER_NAME = "AtracsysTracker"
+_TRACKER_NAME  = "AtracsysTracker"
+_TOPIC_PREFIX  = "/atracsys"   # matches the `atracsys` node's default ROS node name
+_WAIT_TIMEOUT  = 1.0           # seconds to wait for one fresh message before "not visible"
 
 
 class AtracsysTracker:
     """
-    Wrapper around sawAtracsysFusionTrack (cisst/SAW).
+    Subscribes to the `atracsys` ROS node's per-body measured_cp topics.
 
     Usage
     -----
@@ -71,120 +77,69 @@ class AtracsysTracker:
         tracker.disconnect()
     """
 
-    def __init__(self, config_path: str = CONFIG_PATH,
-                 tracker_name: str = _TRACKER_NAME):
-        self._config_path  = config_path
-        self._tracker_name = tracker_name
-        self._manager      = None
-        self._proxy        = None
-        self._interfaces   = {}   # body_name -> cisst interface
+    def __init__(self, topic_prefix: str = _TOPIC_PREFIX,
+                 node_name: str = _TRACKER_NAME):
+        self._topic_prefix = topic_prefix
+        self._node_name    = node_name
+        self._owns_node     = False
 
     # ── connect / disconnect ──────────────────────────────────────────────────
 
     def connect(self):
-        """Initialize cisst/SAW, load the Atracsys component, and start it."""
-        import cisstCommonPython as cmn
-        import cisstMultiTaskPython as mts
-
-        # Suppress verbose cisst logging — comment out to debug hardware issues
-        cmn.cmnLogger_SetMask(cmn.CMN_LOG_ALLOW_ERRORS_AND_WARNINGS)
-        cmn.cmnLogger_SetMaskFunction(cmn.CMN_LOG_ALLOW_ERRORS_AND_WARNINGS)
-        cmn.cmnLogger_SetMaskDefaultLog(cmn.CMN_LOG_ALLOW_ERRORS_AND_WARNINGS)
-        cmn.cmnLogger_SetMaskClassMatching("mts", cmn.CMN_LOG_ALLOW_ERRORS_AND_WARNINGS)
-
-        self._manager = mts.mtsManagerLocal.GetInstance()
-        self._manager.CreateAllAndWait(5.0)
-        self._manager.StartAllAndWait(5.0)
-
-        self._proxy = mts.mtsComponentWithManagement(
-            f"{self._tracker_name}Proxy"
-        )
-        self._manager.AddComponent(self._proxy)
-        self._proxy.CreateAndWait(5.0)
-        time.sleep(0.5)
-
-        services = self._proxy.GetManagerComponentServices()
-
-        result = services.Load("sawAtracsysFusionTrack")
-        if not result:
-            raise RuntimeError("Failed to load sawAtracsysFusionTrack. "
-                               "Is the cisst/SAW library installed and on your path?")
-
-        import cisstMultiTaskPython as mts_inner
-        args = mts_inner.mtsTaskContinuousConstructorArg(self._tracker_name)
-        result = services.ComponentCreate("mtsAtracsysFusionTrack", args)
-        if not result:
-            raise RuntimeError(f"Failed to create mtsAtracsysFusionTrack component.")
-
-        component = self._manager.GetComponent(self._tracker_name)
-        component.Configure(self._config_path)
-        component.CreateAndWait(5.0)
-        component.StartAndWait(5.0)
-
-        # Give the tracker time to initialize and start streaming frames
-        print(f"Tracker component started. Waiting for initialization...")
-        time.sleep(4.5)
-        print("Tracker ready.")
+        """Initialize a rospy node (if one isn't already running in this process)."""
+        if rospy.core.is_initialized():
+            print("[connect] rospy node already initialized in this process — reusing it.")
+            return
+        print("[connect] initializing rospy node...", flush=True)
+        rospy.init_node(self._node_name, anonymous=True, disable_signals=True)
+        self._owns_node = True
+        print("[connect] rospy node ready. Topics are subscribed lazily per body "
+              "(first get_pose() call for each body name).")
 
     def disconnect(self):
-        """Stop and clean up the cisst component manager."""
-        if self._manager is not None:
-            try:
-                self._manager.KillAllAndWait(5.0)
-                self._manager.Cleanup()
-            except Exception:
-                pass
-            self._manager = None
-        self._interfaces.clear()
+        """Shut down the rospy node if this instance created it."""
+        if self._owns_node:
+            rospy.signal_shutdown("AtracsysTracker.disconnect()")
+            self._owns_node = False
 
     # ── pose acquisition ──────────────────────────────────────────────────────
 
-    def _get_interface(self, body_name: str):
-        """Return (or lazily create) the cisst interface for body_name."""
-        if body_name not in self._interfaces:
-            iface = self._proxy.AddInterfaceRequiredAndConnect(
-                (self._tracker_name, body_name)
-            )
-            if iface is None:
-                raise RuntimeError(
-                    f"Could not connect to body '{body_name}'. "
-                    f"Check that it is listed in managerMarker.json and "
-                    f"its geometry JSON file is present."
-                )
-            self._interfaces[body_name] = iface
-        return self._interfaces[body_name]
-
-    def get_pose(self, body_name: str) -> np.ndarray:
+    def get_pose(self, body_name: str, timeout: float = _WAIT_TIMEOUT) -> np.ndarray:
         """
         Return one 4×4 SE(3) measurement for the named rigid body.
 
-        Raises RuntimeError if the body is not currently visible.
+        Blocks for up to `timeout` seconds waiting for the next message on
+        `<topic_prefix>/<body_name>/measured_cp`. Raises RuntimeError if no
+        message arrives in time (body not visible, or the `atracsys` ROS
+        node isn't running / doesn't have this body configured).
 
         Parameters
         ----------
         body_name : str
-            Must match a "name" entry in managerMarker.json exactly.
+            Must match a "name" entry in the running node's managerMarker_test.json.
 
         Returns
         -------
         T : ndarray, shape (4, 4)
             Pose of the rigid body in the tracker's coordinate frame.
-            Translation is in metres.
+            Translation is in metres (the topic publishes millimetres).
         """
-        iface = self._get_interface(body_name)
-        pose  = iface.measured_cp()
-
-        if not pose.GetValid():
+        topic = f"{self._topic_prefix}/{body_name}/measured_cp"
+        try:
+            msg = rospy.wait_for_message(topic, PoseStamped, timeout=timeout)
+        except rospy.ROSException:
             raise RuntimeError(
-                f"Body '{body_name}' is not visible. "
-                "Check line of sight and marker coverage."
+                f"Body '{body_name}' is not visible (no message on '{topic}' "
+                f"within {timeout}s). Check line of sight and marker coverage, "
+                f"and that the 'atracsys' ROS node is running with this body "
+                f"configured."
             )
 
-        # Convert cisst vctFrm3 → 4×4 numpy array
-        frm3 = pose.Position()
+        p = msg.pose.position
+        q = msg.pose.orientation
         T = np.eye(4, dtype=np.float64)
-        T[:3, :3] = np.array(frm3.Rotation(),    dtype=np.float64)
-        T[:3,  3] = np.array(frm3.Translation(), dtype=np.float64) * 1e-3  # mm → m
+        T[:3, :3] = Rotation.from_quat([q.x, q.y, q.z, q.w]).as_matrix()
+        T[:3,  3] = np.array([p.x, p.y, p.z], dtype=np.float64)  # already metres (SI)
         return T
 
     def collect_samples(self, body_name: str, n: int = 200,

@@ -3,11 +3,12 @@
     [
         {
             "name": "Anatomy",
-            "json-file": "geometry_anatomy_reference_5_24.json"
+            "json-file": "test_geometry.json"
         },
         {
             "name": "Anspoch_drill",
-            "json-file": "geometry-drill.json"
+            "json-file": "geometry-drill.json",
+            "reference": "Anatomy"
         }
     ]
 }

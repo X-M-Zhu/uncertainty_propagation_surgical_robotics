@@ -13,6 +13,7 @@ matching the CIS I right-perturbation convention used throughout this project.
 import sys
 import pathlib
 import numpy as np
+from typing import Tuple
 
 _ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT / "src"))
@@ -44,7 +45,7 @@ def se3_mean(samples: np.ndarray, max_iter: int = 100, tol: float = 1e-12) -> np
     return mu
 
 
-def se3_empirical_stats(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def se3_empirical_stats(samples: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
     Compute empirical Fréchet mean and 6×6 tangent-space covariance.
 

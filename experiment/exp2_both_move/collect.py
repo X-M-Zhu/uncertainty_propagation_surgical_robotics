@@ -43,7 +43,7 @@ from utils.se3_stats import save_poses_csv, se3_empirical_stats
 
 # "Anatomy" is measured in the tracker frame.
 # Both bodies are tracked independently in the tracker frame.
-# "reference" is NOT set in managerMarker.json, so measured_cp() returns
+# "reference" is NOT set in managerMarker_test.json, so measured_cp() returns
 # tracker-frame poses for both.  The relative transform T_AB is computed
 # in Python as inv(T_A[i]) @ T_B[i] from simultaneous pairs (see analyze.py).
 BODY_A = "Anatomy"       # tracker → Anatomy  (world link, tracker frame)
