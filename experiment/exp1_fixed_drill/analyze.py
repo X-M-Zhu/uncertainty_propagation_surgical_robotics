@@ -28,6 +28,7 @@ Produces
 """
 
 import sys
+import json
 import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
@@ -46,7 +47,34 @@ DATA_DIR    = _HERE / "data_fixed_drill"
 RESULTS_DIR = _HERE / "results_fixed_drill"
 
 
-def analyse_position(pos_dir: pathlib.Path) -> dict:
+def _skew(v: np.ndarray) -> np.ndarray:
+    return np.array([[0, -v[2], v[1]],
+                     [v[2],  0, -v[0]],
+                     [-v[1], v[0],  0]])
+
+
+def tip_point_covariance(mean_drill: np.ndarray, C_drill: np.ndarray,
+                         p_tip_local: np.ndarray) -> np.ndarray:
+    """
+    Propagate SE(3) covariance C_drill of T_tracker_drill to 3×3 tip position
+    covariance in the tracker frame.
+
+    With right-mult perturbation T_true = T_nom @ Exp([α; ε]):
+        Δq ≈ [-R·skew(p_tip), R] · [α; ε]
+        C_tip = J @ C_drill @ J^T
+
+    Parameters
+    ----------
+    mean_drill  : (4, 4) — nominal drill pose in tracker frame
+    C_drill     : (6, 6) — SE(3) covariance, [α; ε] ordering
+    p_tip_local : (3,)   — tip offset in drill's own frame (metres)
+    """
+    R = mean_drill[:3, :3]
+    J = np.hstack([-R @ _skew(p_tip_local), R])   # 3×6
+    return J @ C_drill @ J.T
+
+
+def analyse_position(pos_dir: pathlib.Path, p_tip_local: np.ndarray = None) -> dict:
     samples_A = load_poses_csv(str(pos_dir / "bodyA.csv"))
     samples_B = load_poses_csv(str(pos_dir / "bodyB.csv"))
     n = min(len(samples_A), len(samples_B))
@@ -70,21 +98,43 @@ def analyse_position(pos_dir: pathlib.Path) -> dict:
     frob_error = np.linalg.norm(U_AB_pred.C - C_AB_emp, "fro")
     rel_error  = frob_error / (np.linalg.norm(C_AB_emp, "fro") + 1e-30)
 
-    return {
-        "C_TA":       C_A,
-        "C_TB":       C_B,
-        "C_AB_emp":   C_AB_emp,
-        "C_AB_pred":  U_AB_pred.C,
-        "mean_AB":    mean_AB,
-        "frob_error": frob_error,
+    result = {
+        "C_TA":          C_A,
+        "C_TB":          C_B,
+        "C_AB_emp":      C_AB_emp,
+        "C_AB_pred":     U_AB_pred.C,
+        "mean_A":        mean_A,
+        "mean_AB":       mean_AB,
+        "frob_error":    frob_error,
         "rel_error_pct": rel_error * 100.0,
-        "summary_A":  summary_stats(mean_A,  C_A),
-        "summary_B":  summary_stats(mean_B,  C_B),
+        "summary_A":     summary_stats(mean_A, C_A),
+        "summary_B":     summary_stats(mean_B, C_B),
     }
+
+    if p_tip_local is not None:
+        # Empirical 3D tip positions in tracker frame from individual drill samples
+        p_tips = np.array([s[:3, :3] @ p_tip_local + s[:3, 3] for s in samples_A])
+        result["C_tip_emp"]  = np.cov(p_tips.T)
+        result["C_tip_pred"] = tip_point_covariance(mean_A, C_A, p_tip_local)
+
+    return result
 
 
 def main():
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Load optional pivot calibration result (from calibrate_pivot.py)
+    tip_json = DATA_DIR / "pivot_cal" / "tip_offset.json"
+    p_tip_local = None
+    if tip_json.exists():
+        tip_data = json.loads(tip_json.read_text())
+        p_tip_local = np.array([tip_data["x_mm"], tip_data["y_mm"],
+                                 tip_data["z_mm"]]) * 1e-3   # convert mm → m
+        print(f"Pivot calibration loaded: tip offset = {p_tip_local * 1000} mm  "
+              f"(cal RMS = {tip_data['rms_residual_mm']:.3f} mm)")
+    else:
+        print(f"No pivot calibration at {tip_json} — tip uncertainty will not be reported.\n"
+              f"Run collect_pivot.py then calibrate_pivot.py to enable it.")
 
     # Load position metadata (label, optional free-form angle_note)
     meta_path = DATA_DIR / "positions.txt"
@@ -100,10 +150,14 @@ def main():
 
     # Per-position analysis
     records = []
-    print(f"\n{'Label':<10} {'Dist(mm)':>9} {'Note':<14} "
-          f"{'σ_TA_t(mm)':>12} {'σ_AB_emp(mm)':>14} {'σ_AB_pred(mm)':>15} "
-          f"{'Frob err':>10} {'Rel err(%)':>11}")
-    print("─" * 100)
+    has_tip = p_tip_local is not None
+    hdr = (f"\n{'Label':<10} {'Dist(mm)':>9} {'Note':<14} "
+           f"{'σ_TA_t(mm)':>12} {'σ_AB_emp(mm)':>14} {'σ_AB_pred(mm)':>15} "
+           f"{'Frob err':>10} {'Rel err(%)':>11}")
+    if has_tip:
+        hdr += f"  {'σ_tip_emp(mm)':>14} {'σ_tip_pred(mm)':>15}"
+    print(hdr)
+    print("─" * (100 + (32 if has_tip else 0)))
 
     report_lines = []
     for pos in positions:
@@ -112,39 +166,46 @@ def main():
             print(f"  {pos['label']}: data not found, skipping")
             continue
 
-        res = analyse_position(pos_dir)
-        sA  = res["summary_A"]    # distance_mm computed automatically from the data
+        res = analyse_position(pos_dir, p_tip_local=p_tip_local)
+        sA       = res["summary_A"]
         sAB_emp  = summary_stats(res["mean_AB"], res["C_AB_emp"])
         sAB_pred = summary_stats(res["mean_AB"], res["C_AB_pred"])
 
-        print(f"{pos['label']:<10} {sA['distance_mm']:>9.0f} {pos['angle_note']:<14} "
-              f"{sA['sigma_trans_mm']:>12.4f} "
-              f"{sAB_emp['sigma_trans_mm']:>14.4f} "
-              f"{sAB_pred['sigma_trans_mm']:>15.4f} "
-              f"{res['frob_error']:>10.6f} "
-              f"{res['rel_error_pct']:>10.2f}%")
+        row = (f"{pos['label']:<10} {sA['distance_mm']:>9.0f} {pos['angle_note']:<14} "
+               f"{sA['sigma_trans_mm']:>12.4f} "
+               f"{sAB_emp['sigma_trans_mm']:>14.4f} "
+               f"{sAB_pred['sigma_trans_mm']:>15.4f} "
+               f"{res['frob_error']:>10.6f} "
+               f"{res['rel_error_pct']:>10.2f}%")
+        rpt = (f"{pos['label']} (dist={sA['distance_mm']:.0f} mm, note='{pos['angle_note']}'): "
+               f"σ_TA_trans={sA['sigma_trans_mm']:.4f} mm  "
+               f"σ_AB_emp={sAB_emp['sigma_trans_mm']:.4f} mm  "
+               f"σ_AB_pred={sAB_pred['sigma_trans_mm']:.4f} mm  "
+               f"frob={res['frob_error']:.6f}  rel={res['rel_error_pct']:.2f}%")
 
+        if has_tip:
+            sigma_tip_emp  = np.sqrt(np.trace(res["C_tip_emp"])  / 3.0) * 1000.0
+            sigma_tip_pred = np.sqrt(np.trace(res["C_tip_pred"]) / 3.0) * 1000.0
+            row += f"  {sigma_tip_emp:>14.4f} {sigma_tip_pred:>15.4f}"
+            rpt += f"  σ_tip_emp={sigma_tip_emp:.4f} mm  σ_tip_pred={sigma_tip_pred:.4f} mm"
+            res["sigma_tip_emp_mm"]  = sigma_tip_emp
+            res["sigma_tip_pred_mm"] = sigma_tip_pred
+
+        print(row)
         records.append({**pos, **res, "distance_mm": sA["distance_mm"]})
-        report_lines.append(
-            f"{pos['label']} (dist={sA['distance_mm']:.0f} mm, note='{pos['angle_note']}'): "
-            f"σ_TA_trans={sA['sigma_trans_mm']:.4f} mm  "
-            f"σ_AB_emp={sAB_emp['sigma_trans_mm']:.4f} mm  "
-            f"σ_AB_pred={sAB_pred['sigma_trans_mm']:.4f} mm  "
-            f"frob={res['frob_error']:.6f}  rel={res['rel_error_pct']:.2f}%"
-        )
+        report_lines.append(rpt)
 
-    # ── Plot: σ_TA and σ_AB vs drill distance (auto-computed, no angle grouping) ──
+    # ── Plot: σ_TA, σ_AB, and (optionally) σ_tip vs drill distance ───────────
     if len(records) >= 2:
-        order       = sorted(range(len(records)), key=lambda i: records[i]["distance_mm"])
-        dists       = [records[i]["distance_mm"] for i in order]
-        sA_trans    = [summary_stats(records[i]["mean_AB"], records[i]["C_TA"])["sigma_trans_mm"]
-                       for i in order]
-        sAB_emp_t   = [summary_stats(records[i]["mean_AB"], records[i]["C_AB_emp"])["sigma_trans_mm"]
-                       for i in order]
-        sAB_pred_t  = [summary_stats(records[i]["mean_AB"], records[i]["C_AB_pred"])["sigma_trans_mm"]
-                       for i in order]
-
-        diff_t = [p - e for p, e in zip(sAB_pred_t, sAB_emp_t)]
+        order      = sorted(range(len(records)), key=lambda i: records[i]["distance_mm"])
+        dists      = [records[i]["distance_mm"] for i in order]
+        sA_trans   = [summary_stats(records[i]["mean_AB"], records[i]["C_TA"])["sigma_trans_mm"]
+                      for i in order]
+        sAB_emp_t  = [summary_stats(records[i]["mean_AB"], records[i]["C_AB_emp"])["sigma_trans_mm"]
+                      for i in order]
+        sAB_pred_t = [summary_stats(records[i]["mean_AB"], records[i]["C_AB_pred"])["sigma_trans_mm"]
+                      for i in order]
+        diff_t     = [p - e for p, e in zip(sAB_pred_t, sAB_emp_t)]
 
         fig, (ax, ax2) = plt.subplots(2, 1, figsize=(8, 8),
                                       gridspec_kw={"height_ratios": [3, 1]},
@@ -152,8 +213,15 @@ def main():
         ax.plot(dists, sA_trans,   "o--", color="gray",      label="σ_TA (drill direct)")
         ax.plot(dists, sAB_emp_t,  "o-",  color="tomato",    label="σ_AB empirical")
         ax.plot(dists, sAB_pred_t, "s-",  color="steelblue", label="σ_AB predicted")
+
+        if has_tip:
+            tip_emp_list  = [records[i]["sigma_tip_emp_mm"]  for i in order]
+            tip_pred_list = [records[i]["sigma_tip_pred_mm"] for i in order]
+            ax.plot(dists, tip_emp_list,  "^-",  color="darkorange",  label="σ_tip empirical")
+            ax.plot(dists, tip_pred_list, "^--", color="forestgreen", label="σ_tip predicted")
+
         ax.set_ylabel("σ translation (mm)")
-        ax.set_title("Fixed-Anatomy experiment: relative pose uncertainty vs drill distance")
+        ax.set_title("Fixed-Anatomy experiment: pose & tip uncertainty vs drill distance")
         ax.legend()
         ax.grid(True, alpha=0.3)
 
@@ -161,7 +229,7 @@ def main():
         ax2.axhline(0, color="black", linewidth=0.8)
         ax2.set_xlabel("Drill distance from tracker (mm, auto-computed)")
         ax2.set_ylabel("pred − emp (mm)")
-        ax2.set_title("Prediction error (σ_AB predicted − empirical)")
+        ax2.set_title("Prediction error  σ_AB (predicted − empirical)")
         ax2.grid(True, alpha=0.3)
 
         fig.tight_layout()
@@ -169,7 +237,7 @@ def main():
         fig.savefig(str(out), dpi=150)
         print(f"\nSaved → {out}")
 
-    # ── Save text report ─────────────────────────────────────────────────────
+    # ── Save text report ──────────────────────────────────────────────────────
     rpt_path = RESULTS_DIR / "per_position_report.txt"
     rpt_path.write_text("\n".join(report_lines))
     print(f"Saved → {rpt_path}")

@@ -33,6 +33,7 @@ machine, not something this analysis should mutate.
 import sys
 import json
 import pathlib
+from typing import Tuple
 import numpy as np
 
 _HERE = pathlib.Path(__file__).resolve().parent
@@ -44,7 +45,7 @@ from utils.se3_stats import load_poses_csv
 PIVOT_DIR = _HERE / "data_fixed_drill" / "pivot_cal"
 
 
-def solve_pivot(samples: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+def solve_pivot(samples: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
     """
     Parameters
     ----------
