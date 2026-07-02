@@ -144,15 +144,26 @@ def main():
         sAB_pred_t  = [summary_stats(records[i]["mean_AB"], records[i]["C_AB_pred"])["sigma_trans_mm"]
                        for i in order]
 
-        fig, ax = plt.subplots(figsize=(8, 5))
+        diff_t = [p - e for p, e in zip(sAB_pred_t, sAB_emp_t)]
+
+        fig, (ax, ax2) = plt.subplots(2, 1, figsize=(8, 8),
+                                      gridspec_kw={"height_ratios": [3, 1]},
+                                      sharex=True)
         ax.plot(dists, sA_trans,   "o--", color="gray",      label="σ_TA (drill direct)")
         ax.plot(dists, sAB_emp_t,  "o-",  color="tomato",    label="σ_AB empirical")
         ax.plot(dists, sAB_pred_t, "s-",  color="steelblue", label="σ_AB predicted")
-        ax.set_xlabel("Drill distance from tracker (mm, auto-computed)")
         ax.set_ylabel("σ translation (mm)")
         ax.set_title("Fixed-Anatomy experiment: relative pose uncertainty vs drill distance")
         ax.legend()
         ax.grid(True, alpha=0.3)
+
+        ax2.bar(dists, diff_t, width=12, color="steelblue", alpha=0.7)
+        ax2.axhline(0, color="black", linewidth=0.8)
+        ax2.set_xlabel("Drill distance from tracker (mm, auto-computed)")
+        ax2.set_ylabel("pred − emp (mm)")
+        ax2.set_title("Prediction error (σ_AB predicted − empirical)")
+        ax2.grid(True, alpha=0.3)
+
         fig.tight_layout()
         out = RESULTS_DIR / "fig_sigma_vs_drill_distance.png"
         fig.savefig(str(out), dpi=150)
