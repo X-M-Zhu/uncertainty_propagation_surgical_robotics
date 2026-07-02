@@ -1,0 +1,12 @@
+pos_01 (dist=346 mm): m0=0.9327mm m1=0.9352mm m2=0.9392mm m3=0.9361mm avg=0.9358mm
+pos_02 (dist=160 mm): m0=0.8588mm m1=0.8584mm m2=0.8598mm m3=0.8617mm avg=0.8597mm
+pos_03 (dist=284 mm): m0=0.9509mm m1=0.9510mm m2=0.9527mm m3=0.9538mm avg=0.9521mm
+pos_04 (dist=264 mm): m0=0.8157mm m1=0.8176mm m2=0.8199mm m3=0.8175mm avg=0.8177mm
+pos_05 (dist=398 mm): m0=0.9324mm m1=0.9369mm m2=0.9422mm m3=0.9354mm avg=0.9367mm
+pos_06 (dist=490 mm): m0=1.1232mm m1=1.1268mm m2=1.1308mm m3=1.1251mm avg=1.1265mm
+pos_07 (dist=270 mm): m0=0.9167mm m1=0.9174mm m2=0.9192mm m3=0.9189mm avg=0.9181mm
+pos_08 (dist=176 mm): m0=0.8734mm m1=0.8720mm m2=0.8731mm m3=0.8773mm avg=0.8739mm
+pos_09 (dist=252 mm): m0=0.8941mm m1=0.8910mm m2=0.8908mm m3=0.8979mm avg=0.8935mm
+pos_10 (dist=266 mm): m0=0.9098mm m1=0.9038mm m2=0.9009mm m3=0.9126mm avg=0.9068mm
+pos_11 (dist=300 mm): m0=0.8918mm m1=0.8960mm m2=0.9001mm m3=0.8931mm avg=0.8952mm
+pos_12 (dist=356 mm): m0=0.9089mm m1=0.9113mm m2=0.9143mm m3=0.9110mm avg=0.9114mm

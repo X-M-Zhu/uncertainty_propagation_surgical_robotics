@@ -49,8 +49,8 @@ from utils.se3_stats import load_poses_csv
 
 DATA_DIR = _HERE / "data_fixed_drill"
 
-GEOMETRY_DRILL   = _ROOT / "hardware" / "atracsys" / "atracsys" / "geometry_anspoch_drill.json"
-GEOMETRY_ANATOMY = _ROOT / "hardware" / "atracsys" / "atracsys" / "geometry_anatomy_reference_5_24.json"
+GEOMETRY_DRILL   = _ROOT / "hardware" / "atracsys" / "atracsys" / "core" / "share" / "geometry_anspoch_drill.json"
+GEOMETRY_ANATOMY = _ROOT / "hardware" / "atracsys" / "atracsys" / "core" / "share" / "geometry_anatomy_reference_5_24.json"
 
 
 def load_fiducials_m(geometry_path: pathlib.Path) -> np.ndarray:
