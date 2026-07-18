@@ -1,5 +1,5 @@
-cfg_01: m0=0.2745mm m1=0.2752mm m2=0.2761mm m3=0.2750mm avg=0.2752mm
-cfg_02: m0=0.2069mm m1=0.2073mm m2=0.2078mm m3=0.2070mm avg=0.2073mm
-cfg_03: m0=0.3534mm m1=0.3543mm m2=0.3548mm m3=0.3529mm avg=0.3538mm
-cfg_04: m0=0.4104mm m1=0.4125mm m2=0.4133mm m3=0.4087mm avg=0.4112mm
-cfg_05: m0=0.2946mm m1=0.2952mm m2=0.2943mm m3=0.2919mm avg=0.2940mm
+cfg_01: m0=0.5468mm m1=0.5478mm m2=0.5487mm m3=0.5467mm avg=0.5475mm
+cfg_02: m0=0.7686mm m1=0.7692mm m2=0.7707mm m3=0.7706mm avg=0.7698mm
+cfg_03: m0=0.5522mm m1=0.5535mm m2=0.5561mm m3=0.5552mm avg=0.5542mm
+cfg_04: m0=0.3625mm m1=0.3623mm m2=0.3634mm m3=0.3648mm avg=0.3632mm
+cfg_05: m0=0.4023mm m1=0.4006mm m2=0.3999mm m3=0.4034mm avg=0.4016mm
