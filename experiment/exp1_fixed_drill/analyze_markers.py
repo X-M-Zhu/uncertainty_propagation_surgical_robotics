@@ -30,17 +30,10 @@ _HERE = pathlib.Path(__file__).resolve().parent
 _EXP  = _HERE.parent
 sys.path.insert(0, str(_EXP))
 
+from utils.marker_io import load_marker_csv
+
 DATA_DIR    = _HERE / "data_fixed_drill"
 RESULTS_DIR = _HERE / "results_fixed_drill"
-
-
-def load_marker_csv(path: pathlib.Path) -> np.ndarray:
-    """Load a flattened marker CSV back into (N, n_markers, 3)."""
-    data = np.loadtxt(str(path), delimiter=",", skiprows=1)
-    if data.ndim == 1:
-        data = data[np.newaxis, :]
-    n_markers = data.shape[1] // 3
-    return data.reshape(-1, n_markers, 3)
 
 
 def marker_stats(markers: np.ndarray) -> list:
@@ -79,8 +72,8 @@ def main():
     report_lines = []
     dist_mm_list, sigA_list, sigB_list = [], [], []
 
-    print(f"\n{'Position':<10} {'Body':<8} {'Marker':>6} {'σ(mm)':>8}")
-    print("─" * 40)
+    print(f"\n{'Position':<10} {'Body':<8} {'Source':<8} {'Marker':>6} {'σ(mm)':>8}")
+    print("─" * 50)
 
     for pos_dir in pos_dirs:
         markersA_path = pos_dir / "markersA.csv"
@@ -96,11 +89,11 @@ def main():
         stats_B = marker_stats(markers_B)
 
         for k, s in enumerate(stats_A):
-            print(f"{pos_dir.name:<10} {'drill':<8} {k:>6} {s['sigma_mm']:>8.4f}")
-            report_lines.append(f"{pos_dir.name},drill,m{k},{s['sigma_mm']:.4f}")
+            print(f"{pos_dir.name:<10} {'drill':<8} {'reproj':<8} {k:>6} {s['sigma_mm']:>8.4f}")
+            report_lines.append(f"{pos_dir.name},drill,reproj,m{k},{s['sigma_mm']:.4f}")
         for k, s in enumerate(stats_B):
-            print(f"{pos_dir.name:<10} {'anatomy':<8} {k:>6} {s['sigma_mm']:>8.4f}")
-            report_lines.append(f"{pos_dir.name},anatomy,m{k},{s['sigma_mm']:.4f}")
+            print(f"{pos_dir.name:<10} {'anatomy':<8} {'reproj':<8} {k:>6} {s['sigma_mm']:>8.4f}")
+            report_lines.append(f"{pos_dir.name},anatomy,reproj,m{k},{s['sigma_mm']:.4f}")
 
         # Distance auto-computed from the drill markers' mean centroid (no manual input).
         centroid_A = np.mean([s["mean"] for s in stats_A], axis=0)
@@ -111,8 +104,25 @@ def main():
         sigA_list.append(avg_sigA)
         sigB_list.append(avg_sigB)
 
+        # Raw per-marker measurements (collect.py, straight from marker_positions
+        # topic) — compare against the reprojected values above as a rigidity check.
+        markersA_raw_path = pos_dir / "markersA_raw.csv"
+        markersB_raw_path = pos_dir / "markersB_raw.csv"
+        if markersA_raw_path.exists() and markersB_raw_path.exists():
+            stats_A_raw = marker_stats(load_marker_csv(markersA_raw_path))
+            stats_B_raw = marker_stats(load_marker_csv(markersB_raw_path))
+            for k, s in enumerate(stats_A_raw):
+                print(f"{pos_dir.name:<10} {'drill':<8} {'raw':<8} {k:>6} {s['sigma_mm']:>8.4f}")
+                report_lines.append(f"{pos_dir.name},drill,raw,m{k},{s['sigma_mm']:.4f}")
+            for k, s in enumerate(stats_B_raw):
+                print(f"{pos_dir.name:<10} {'anatomy':<8} {'raw':<8} {k:>6} {s['sigma_mm']:>8.4f}")
+                report_lines.append(f"{pos_dir.name},anatomy,raw,m{k},{s['sigma_mm']:.4f}")
+        else:
+            print(f"  {pos_dir.name}: no markersA_raw.csv/markersB_raw.csv "
+                  f"(re-run collect.py to get raw per-marker data)")
+
     (RESULTS_DIR / "marker_report.txt").write_text(
-        "\n".join(["position,body,marker,sigma_mm"] + report_lines)
+        "\n".join(["position,body,source,marker,sigma_mm"] + report_lines)
     )
     print(f"\nSaved → {RESULTS_DIR / 'marker_report.txt'}")
 

@@ -16,7 +16,18 @@ own account, e.g.:
 That node owns the cisst/SAW component in-process (loads the SDK, talks to
 the hardware) and bridges every configured tool to a ROS topic via CRTK:
 
-    /atracsys/<body_name>/measured_cp      (geometry_msgs/PoseStamped, metres)
+    /atracsys/<body_name>/measured_cp        (geometry_msgs/PoseStamped, metres)
+    /atracsys/<body_name>/marker_positions   (geometry_msgs/PoseArray, metres)
+
+measured_cp is the fitted rigid-body pose (center of frame). marker_positions
+carries one entry per fiducial actually detected that frame, each entry's
+`position` being that fiducial's raw tracker-frame 3-D position (orientation
+fields are unused/identity — fiducials don't have their own orientation).
+This is a genuine independent per-marker measurement from the SDK's raw
+3-D fiducial reconstruction, not a reprojection of the fitted pose (compare
+exp1_fixed_drill/extract_markers.py, which derives markers by reprojecting
+the pose through each marker's fixed local geometry offset — that approach
+predates this topic and is kept only as a side-by-side rigidity check).
 
 This module does NOT load cisst/SAW components itself — it only subscribes
 to those topics. (An earlier version of this file instantiated
@@ -54,7 +65,7 @@ These two bodies cover all three experiments:
 import numpy as np
 
 import rospy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseArray
 from scipy.spatial.transform import Rotation
 
 _TRACKER_NAME  = "AtracsysTracker"
@@ -141,6 +152,37 @@ class AtracsysTracker:
         T[:3, :3] = Rotation.from_quat([q.x, q.y, q.z, q.w]).as_matrix()
         T[:3,  3] = np.array([p.x, p.y, p.z], dtype=np.float64)  # already metres (SI)
         return T
+
+    def get_marker_positions(self, body_name: str, timeout: float = _WAIT_TIMEOUT) -> np.ndarray:
+        """
+        Return the raw per-marker (fiducial) tracker-frame positions for the
+        named rigid body, from `<topic_prefix>/<body_name>/marker_positions`.
+
+        Unlike get_pose(), which returns the fitted rigid-body pose, this is
+        one independent 3-D position per fiducial actually detected that
+        frame (see module docstring). The number of entries can be less than
+        the body's total fiducial count if some markers are occluded that
+        frame.
+
+        Returns
+        -------
+        markers : ndarray, shape (n_detected, 3)
+        """
+        topic = f"{self._topic_prefix}/{body_name}/marker_positions"
+        try:
+            msg = rospy.wait_for_message(topic, PoseArray, timeout=timeout)
+        except rospy.ROSException:
+            raise RuntimeError(
+                f"Body '{body_name}' marker positions not available (no message "
+                f"on '{topic}' within {timeout}s). Check line of sight and that "
+                f"the 'atracsys' ROS node is running with this body configured."
+            )
+        if len(msg.poses) == 0:
+            raise RuntimeError(f"'{body_name}' marker_positions message had zero entries.")
+        return np.array(
+            [[p.position.x, p.position.y, p.position.z] for p in msg.poses],
+            dtype=np.float64,
+        )
 
     def collect_samples(self, body_name: str, n: int = 200,
                         verbose: bool = True) -> np.ndarray:

@@ -16,11 +16,18 @@ Caveat
 This is a *reprojection*, not an independent raw measurement: it assumes the
 tool is perfectly rigid (local marker geometry never changes) and reuses the
 already-fitted pose T. It does NOT recover marker-level noise that the
-Atracsys SDK's internal rigid-body fit may have already averaged out — true
-raw fiducial correspondences are not exposed by this driver (see
-atracsys_interface.py docstring). What it DOES give you: each marker's actual
-3-D position in the tracker frame at each sample, useful for visualizing
-marker spread / sanity-checking the rigid-body assumption.
+Atracsys SDK's internal rigid-body fit may have already averaged out. What it
+DOES give you: each marker's actual 3-D position in the tracker frame at each
+sample, useful for visualizing marker spread / sanity-checking the rigid-body
+assumption.
+
+collect.py now ALSO records genuine independent per-marker measurements
+(markersA_raw.csv / markersB_raw.csv) straight from the tracker's raw fiducial
+reconstruction via the `marker_positions` ROS topic — see
+atracsys_interface.py docstring. This script's reprojected output
+(markersA.csv / markersB.csv) is kept alongside that as a rigidity check:
+comparing raw vs. reprojected per-marker sigma (see analyze_markers.py) shows
+whether the rigid-body assumption is actually holding.
 
 Reads
 -----
@@ -46,6 +53,7 @@ _ROOT = _EXP.parent
 sys.path.insert(0, str(_EXP))
 
 from utils.se3_stats import load_poses_csv
+from utils.marker_io import save_marker_csv
 
 DATA_DIR = _HERE / "data_fixed_drill"
 
@@ -92,16 +100,6 @@ def derive_marker_positions(frame_samples: np.ndarray, fiducials_local: np.ndarr
         t = frame_samples[i, :3, 3]
         out[i] = fiducials_local @ R.T + t
     return out
-
-
-def save_marker_csv(path: pathlib.Path, markers: np.ndarray) -> None:
-    """Save (N, n_markers, 3) as a flat CSV: N rows x (n_markers*3) columns."""
-    N, n_markers, _ = markers.shape
-    flat = markers.reshape(N, n_markers * 3)
-    header = ",".join(
-        f"m{k}_{ax}" for k in range(n_markers) for ax in ("x", "y", "z")
-    )
-    np.savetxt(str(path), flat, delimiter=",", header=header, comments="")
 
 
 def main():
