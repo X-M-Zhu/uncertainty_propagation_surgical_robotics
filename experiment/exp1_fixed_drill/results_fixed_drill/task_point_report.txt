@@ -1,0 +1,12 @@
+pos_01 (dist=404 mm): tip_RMS pred=0.7631mm emp=0.7641mm  95%CI pred=2.7294mm emp=2.7346mm  frob=0.000000 rel=1.67%
+pos_02 (dist=462 mm): tip_RMS pred=0.8800mm emp=0.8804mm  95%CI pred=3.1122mm emp=3.1059mm  frob=0.000000 rel=1.01%
+pos_03 (dist=421 mm): tip_RMS pred=0.7184mm emp=0.7178mm  95%CI pred=2.6116mm emp=2.6079mm  frob=0.000000 rel=1.37%
+pos_04 (dist=351 mm): tip_RMS pred=0.8663mm emp=0.8672mm  95%CI pred=3.0486mm emp=3.0433mm  frob=0.000000 rel=1.95%
+pos_05 (dist=323 mm): tip_RMS pred=0.6751mm emp=0.6755mm  95%CI pred=2.5472mm emp=2.5548mm  frob=0.000000 rel=1.82%
+pos_06 (dist=271 mm): tip_RMS pred=0.6989mm emp=0.6986mm  95%CI pred=2.5189mm emp=2.5250mm  frob=0.000000 rel=1.76%
+pos_07 (dist=272 mm): tip_RMS pred=0.7965mm emp=0.7984mm  95%CI pred=2.8002mm emp=2.8030mm  frob=0.000000 rel=0.99%
+pos_08 (dist=162 mm): tip_RMS pred=0.7282mm emp=0.7279mm  95%CI pred=2.5883mm emp=2.5927mm  frob=0.000000 rel=1.83%
+pos_09 (dist=160 mm): tip_RMS pred=0.6584mm emp=0.6604mm  95%CI pred=2.4814mm emp=2.4972mm  frob=0.000000 rel=1.99%
+pos_10 (dist=223 mm): tip_RMS pred=0.6817mm emp=0.6819mm  95%CI pred=2.4435mm emp=2.4495mm  frob=0.000000 rel=1.38%
+pos_11 (dist=300 mm): tip_RMS pred=1.2549mm emp=1.2552mm  95%CI pred=4.4600mm emp=4.4743mm  frob=0.000000 rel=1.74%
+pos_12 (dist=356 mm): tip_RMS pred=1.2868mm emp=1.2886mm  95%CI pred=4.7468mm emp=4.7587mm  frob=0.000000 rel=1.17%
