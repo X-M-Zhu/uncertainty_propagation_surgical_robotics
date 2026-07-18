@@ -26,6 +26,16 @@ Then the composed frame is:  F_AB_composed = F_TA @ F_AB_relative
 where F_AB_relative = inv(F_TA_mean) @ F_TB_mean  (computed once at the start).
 
 Alternatively, if you can track all bodies simultaneously, do so.
+
+Data layout
+-----------
+data/cfg_01/  bodyA.csv   bodyB.csv   markersA_raw.csv   markersB_raw.csv
+...
+bodyA.csv / bodyB.csv are the fitted rigid-body pose (center of frame).
+markersA_raw.csv / markersB_raw.csv are each body's individual marker
+positions for that same sample, read straight from the `marker_positions`
+ROS topic (see utils/atracsys_interface.py) — a genuine independent
+per-marker measurement, not a reprojection.
 """
 
 import sys
@@ -38,6 +48,7 @@ sys.path.insert(0, str(_EXP))
 
 from utils.atracsys_interface import AtracsysTracker
 from utils.se3_stats import save_poses_csv, se3_empirical_stats
+from utils.marker_io import save_marker_csv
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -69,9 +80,12 @@ def main():
         print(f"═══ Configuration {cfg}/{N_CONFIGS} ({cfg_label}) ═══")
         input("  Place Anatomy + Drill in a new configuration, then press Enter...")
 
-        # Collect SIMULTANEOUS pairs: one T_A and one T_B at each time step.
+        # Collect SIMULTANEOUS pairs: one T_A and one T_B at each time step,
+        # plus each body's raw per-marker positions for that same instant.
         # Pairing is required so relative poses inv(T_A[i]) @ T_B[i] are valid.
         samples_A, samples_B = [], []
+        markers_A, markers_B = [], []
+        n_markers_A, n_markers_B = None, None
         print(f"  Collecting {N_SAMPLES} simultaneous pairs...")
         attempts = 0
         while len(samples_A) < N_SAMPLES and attempts < N_SAMPLES * 3:
@@ -79,8 +93,16 @@ def main():
             try:
                 T_A = tracker.get_pose(BODY_A)
                 T_B = tracker.get_pose(BODY_B)
+                mk_A = tracker.get_marker_positions(BODY_A)
+                mk_B = tracker.get_marker_positions(BODY_B)
+                if n_markers_A is None:
+                    n_markers_A, n_markers_B = len(mk_A), len(mk_B)
+                if len(mk_A) != n_markers_A or len(mk_B) != n_markers_B:
+                    continue   # a marker dropped out this frame — skip, retry
                 samples_A.append(T_A)
                 samples_B.append(T_B)
+                markers_A.append(mk_A)
+                markers_B.append(mk_B)
             except RuntimeError:
                 pass   # one body briefly occluded — skip and retry
 
@@ -89,8 +111,12 @@ def main():
 
         samples_A = np.stack(samples_A)
         samples_B = np.stack(samples_B)
+        markers_A = np.stack(markers_A)
+        markers_B = np.stack(markers_B)
         save_poses_csv(str(cfg_dir / "bodyA.csv"), samples_A)
         save_poses_csv(str(cfg_dir / "bodyB.csv"), samples_B)
+        save_marker_csv(cfg_dir / "markersA_raw.csv", markers_A)
+        save_marker_csv(cfg_dir / "markersB_raw.csv", markers_B)
 
         for tag, samples in [("Anatomy", samples_A), ("Drill", samples_B)]:
             _, C = se3_empirical_stats(samples)
