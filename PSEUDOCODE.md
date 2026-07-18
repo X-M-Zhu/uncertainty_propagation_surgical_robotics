@@ -94,59 +94,181 @@ A rigid transform with attached Gaussian uncertainty.
 
 ```
 CLASS UncertainTransform:
-    F_nom : 4×4   ← nominal homogeneous transform
-    C     : 6×6   ← covariance of perturbation η (CIS I: [α; ε])
+    F_nom      : 4×4          ← nominal homogeneous transform
+    C          : 6×6          ← covariance of perturbation η (CIS I: [α; ε])
+    convention : Convention   ← RIGHT (default) or LEFT
+```
+
+### 3.0 Convention enum
+
+Two perturbation conventions are supported:
+
+```
+Convention.RIGHT  (body-frame, CIS I default):
+    T_true = F_nom @ Exp(η)     η ~ N(0, C)
+
+Convention.LEFT  (world-frame):
+    T_true = Exp(η) @ F_nom     η ~ N(0, C)
+
+Bridge formulas:
+    C_left  = Ad(F_nom)    @ C_right @ Ad(F_nom)^T
+    C_right = Ad(F_nom^-1) @ C_left  @ Ad(F_nom^-1)^T
+```
+
+```
+FUNCTION as_right_convention(U):
+    IF U.convention == RIGHT: RETURN copy of U
+    Ad_inv   = adjoint_se3(inv(U.F_nom))
+    C_right  = Ad_inv @ U.C @ Ad_inv^T
+    RETURN UncertainTransform(U.F_nom, symmetrise(C_right), RIGHT)
+
+FUNCTION as_left_convention(U):
+    IF U.convention == LEFT: RETURN copy of U
+    Ad       = adjoint_se3(U.F_nom)
+    C_left   = Ad @ U.C @ Ad^T
+    RETURN UncertainTransform(U.F_nom, symmetrise(C_left), LEFT)
+
+FUNCTION from_left_covariance(F_nom, C_left):
+    Ad_inv   = adjoint_se3(inv(F_nom))
+    C_right  = Ad_inv @ C_left @ Ad_inv^T
+    RETURN UncertainTransform(F_nom, C_right, RIGHT)
 ```
 
 ### 3a. Composition  (`A @ B` or `A.compose(B)`)
 
+`compose` dispatches to one of four subroutines based on the convention
+of each operand. The result convention always follows the left operand.
+
 ```
-┌──────────────────────────────────────────────────────────┐
-│  F_ac  =  F_ab  ∘  F_bc                                  │
-│                                                          │
-│  Nominal:   F_nom,ac = F_nom,ab · F_nom,bc               │
-│                                                          │
-│  Covariance (first-order):                               │
-│    C_ac ≈ Ad_{F_nom,bc^{-1}} · C_ab · Ad_{F_nom,bc^{-1}}ᵀ│
-│           +  C_bc                                        │
-│                                                          │
-│  WHY: the first transform's perturbation is expressed    │
-│  at the goal frame via the inverse adjoint of F_bc.      │
-└──────────────────────────────────────────────────────────┘
+Dispatch table:
+    self \ other | RIGHT        | LEFT
+    -------------|--------------|----------------
+    RIGHT        | _compose_rr  | _compose_rl
+    LEFT         | _compose_lr  | _compose_ll
 ```
 
 ```
-FUNCTION compose(F_ab, F_bc):
-    F_nom_ac = F_nom_ab · F_nom_bc
-    Ad       = adjoint_se3(inv(F_nom_bc))
-    C_ac     = Ad · C_ab · Adᵀ + C_bc
-    RETURN UncertainTransform(F_nom_ac, C_ac)
+─── RIGHT @ RIGHT → RIGHT ─────────────────────────────────────
+    T_ab = F_ab @ Exp(η_ab),   T_bc = F_bc @ Exp(η_bc)
+    T_ac = F_ac @ Exp(Ad(F_bc^{-1}) η_ab + η_bc)
+
+FUNCTION _compose_rr(F_ab, C_ab, F_bc, C_bc):
+    F_ac    = F_ab @ F_bc
+    Ad_inv  = adjoint_se3(inv(F_bc))
+    C_ac    = Ad_inv @ C_ab @ Ad_inv^T + C_bc
+    RETURN UncertainTransform(F_ac, symmetrise(C_ac), RIGHT)
+
+─── LEFT @ LEFT → LEFT ─────────────────────────────────────────
+    T_ab = Exp(η_ab) @ F_ab,   T_bc = Exp(η_bc) @ F_bc
+    T_ac = Exp(η_ab + Ad(F_ab) η_bc) @ F_ac
+
+FUNCTION _compose_ll(F_ab, C_ab, F_bc, C_bc):
+    F_ac    = F_ab @ F_bc
+    Ad_ab   = adjoint_se3(F_ab)
+    C_ac    = C_ab + Ad_ab @ C_bc @ Ad_ab^T
+    RETURN UncertainTransform(F_ac, symmetrise(C_ac), LEFT)
+
+─── RIGHT @ LEFT → RIGHT ───────────────────────────────────────
+    T_ab = F_ab @ Exp(η_R),   T_bc = Exp(η_L) @ F_bc
+    T_ac ≈ F_ac @ Exp(Ad(F_bc^{-1})(η_R + η_L))
+
+FUNCTION _compose_rl(F_ab, C_ab, F_bc, C_bc):
+    F_ac    = F_ab @ F_bc
+    Ad_inv  = adjoint_se3(inv(F_bc))
+    C_ac    = Ad_inv @ (C_ab + C_bc) @ Ad_inv^T
+    RETURN UncertainTransform(F_ac, symmetrise(C_ac), RIGHT)
+
+─── LEFT @ RIGHT → LEFT ────────────────────────────────────────
+    T_ab = Exp(η_L) @ F_ab,   T_bc = F_bc @ Exp(η_R)
+    T_ac = Exp(η_L + Ad(F_ac) η_R) @ F_ac
+
+FUNCTION _compose_lr(F_ab, C_ab, F_bc, C_bc):
+    F_ac    = F_ab @ F_bc
+    Ad_ac   = adjoint_se3(F_ac)
+    C_ac    = C_ab + Ad_ac @ C_bc @ Ad_ac^T
+    RETURN UncertainTransform(F_ac, symmetrise(C_ac), LEFT)
 ```
+
+Note: `symmetrise(C) = 0.5 * (C + C^T)` enforces exact symmetry after
+floating-point arithmetic.
 
 ### 3b. Inversion
 
 ```
-FUNCTION inv(F_ab):
-    F_nom_ba = inv_se3(F_nom_ab)
-    Ad       = adjoint_se3(F_nom_ab)
-    C_ba     = Ad · C_ab · Adᵀ
-    RETURN UncertainTransform(F_nom_ba, C_ba)
+─── RIGHT convention ───────────────────────────────────────────
+    T_true = F_nom @ Exp(η_R)
+    T_true^{-1} = F_nom^{-1} @ Exp(-η_R)   (re-expressed as right)
+    C_inv = Ad(F_nom) @ C @ Ad(F_nom)^T
+
+─── LEFT convention ────────────────────────────────────────────
+    T_true = Exp(η_L) @ F_nom
+    T_true^{-1} = Exp(-Ad(F_nom^{-1}) η_L) @ F_nom^{-1}
+    C_inv = Ad(F_nom^{-1}) @ C @ Ad(F_nom^{-1})^T
+
+FUNCTION inv(U):
+    F_inv = inv_se3(U.F_nom)
+    IF U.convention == RIGHT:
+        Ad = adjoint_se3(U.F_nom)
+    ELSE:
+        Ad = adjoint_se3(F_inv)
+    C_inv = Ad @ U.C @ Ad^T
+    RETURN UncertainTransform(F_inv, C_inv, U.convention)
 ```
 
-### 3c. Point Transformation
+### 3c. Point Transformation (`apply_to_point`)
 
 ```
-FUNCTION transform_point(p_local ∈ R^3, Cp_local ∈ R^{3×3}):
+FUNCTION apply_to_point(U, p_local ∈ R^3, Cp_local ∈ R^{3×3} or None):
 
     p_nom = R · p_local + t            ← nominal transformed point
 
     CIS I Jacobian w.r.t. η = [α; ε]  (right-perturbation convention):
-    J_η = [-R · [p_local]×  |  R]     ← shape 3×6  (p_local is the input body-frame point)
+    J_η = [-R · [p_local]×  |  R]     ← shape 3×6
 
-    C_point =  J_η · C · J_ηᵀ          ← from pose uncertainty
-             + R  · Cp_local · Rᵀ      ← from point's own uncertainty
+    C_point =  J_η · C · J_ηᵀ                    ← from pose uncertainty
+    IF Cp_local is not None:
+        C_point += R · Cp_local · Rᵀ              ← from point's own uncertainty
 
     RETURN (p_nom, C_point)
+```
+
+---
+
+## 3d. Uncertain Cartesian Types  (`uncertain_types.py`)
+
+Higher-level wrappers that carry covariance through ordinary arithmetic.
+All first-order Gaussian error propagation, matching the CIS I convention.
+
+```
+CLASS uScalar:
+    val : float    ← nominal scalar value
+    var : float    ← variance  (σ²)
+
+Operations (first-order Gaussian):
+    us1 + us2  →  val = v1+v2,          var = σ1²+σ2²
+    us1 - us2  →  val = v1-v2,          var = σ1²+σ2²
+    us1 * us2  →  val = v1*v2,          var = (v2·σ1)²+(v1·σ2)²
+    us1 / us2  →  val = v1/v2,          var = (σ1/v2)²+(v1·σ2/v2²)²
+    us1 ** n   →  val = v1^n,           var = (n·v1^(n-1)·σ1)²
+    a   * us1  →  val = a·v1,           var = (a·σ1)²
+    -us1       →  val = -v1,            var = σ1²
+```
+
+```
+CLASS uVector:
+    val : ndarray (n,)    ← nominal vector
+    cov : ndarray (n,n)   ← covariance matrix
+
+Operations:
+    uv1 + uv2         →  val = v1+v2,   cov = C1+C2
+    uv1 - uv2         →  val = v1-v2,   cov = C1+C2
+    a   * uv1         →  val = a·v1,    cov = a²·C1
+    A   @ uv1         →  val = A·v1,    cov = A·C1·Aᵀ     (A is 2-D matrix)
+    w   @ uv1         →  uScalar:  val = w·v1, var = w·C1·wᵀ  (w is 1-D)
+    uv1 @ A           →  val = v1·A,    cov = A^T·C1·A
+    uv1.dot(w)        →  uScalar:  same as w @ uv1
+    uv1.norm()        →  uScalar:  val = ||v1||,
+                                   var = (v1/||v1||)·C1·(v1/||v1||)ᵀ
 ```
 
 ---
@@ -747,7 +869,13 @@ src/uncertainty_networks/
 │                            exp_se3, log_se3, adjoint_se3, skew, inv_se3
 │
 ├── uncertain_geometry.py    Core uncertain transform type
-│                            UncertainTransform (compose, inv, transform_point)
+│                            Convention (RIGHT / LEFT)
+│                            UncertainTransform (compose, inv, apply_to_point,
+│                              as_right_convention, as_left_convention,
+│                              from_left_covariance, from_nominal_frame)
+│
+├── uncertain_types.py       User-facing uncertain Cartesian types
+│                            uScalar, uVector, uvct3, uRot, uFrame
 │
 ├── network.py               Main graph structure + all queries
 │                            GeometricNetwork, Edge, PathResult, PointNode
