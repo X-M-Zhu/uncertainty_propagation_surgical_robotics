@@ -271,6 +271,95 @@ Operations:
                                    var = (v1/||v1||)·C1·(v1/||v1||)ᵀ
 ```
 
+```
+CLASS uvct3:
+    p : vct3           ← nominal 3-D point
+    C : 3×3            ← position covariance
+
+Constructors:
+    uvct3(p)           p is vct3 or array-like, zero covariance
+    uvct3(p, C)        p + 3×3 covariance
+
+Properties:
+    .x, .y, .z         coordinate access
+    .p                 underlying vct3
+
+Operations:
+    uvct3 + uvct3  →  uvct3:  p=p1+p2,   C=C1+C2
+    uvct3 + vct3   →  uvct3:  p=p1+p2,   C=C1      (p2 certain)
+    vct3  + uvct3  →  uvct3:  same
+```
+
+```
+CLASS uRot:
+    R          : Rot    ← nominal rotation
+    C          : 3×3    ← rotation covariance (right-perturbation, α-space)
+    convention : Convention   ← always RIGHT after construction
+
+Constructors:
+    uRot(R)                  Rot, zero covariance
+    uRot(R, Calpha)          Rot + 3×3 covariance (right-convention)
+    uRot('x'/'y'/'z', uAngle)
+        C = (ax ⊗ ax) · var(uAngle)           (axis is certain)
+    uRot(uAxis, angle)       axis uncertain, angle certain
+        C = angle² · C_axis
+    uRot(uAxis, uAngle)      both uncertain (first-order)
+        C = angle² · C_axis + (ax ⊗ ax) · var(uAngle)
+
+Multiplication (right-perturbation convention throughout):
+    uRot * uvct3  →  uvct3:  p = R·p_in,  C = J_α·C_R·J_αᵀ + R·C_p·Rᵀ
+                             where J_α = -R·[p_in]×
+    uRot * vct3   →  uvct3:  same without C_p term
+    uRot * uRot   →  uRot:   R = R1·R2,  C = R2ᵀ·C1·R2 + C2
+    uRot * Rot    →  uRot:   R = R1·R2,  C = R2ᵀ·C1·R2
+    Rot  * uRot   →  uRot:   R = R1·R2,  C = C2        (R1 certain)
+
+Convention bridge:
+    uRot.from_left_covariance(R, C_left)
+        C_right = Rᵀ · C_left · R
+        RETURN uRot(R, C_right)
+    uRot.as_right_convention()   → no-op if already RIGHT
+    uRot.as_left_convention()    → C_left = R · C_right · Rᵀ
+```
+
+```
+CLASS uFrame:
+    Wraps UncertainTransform; provides Frame/Rot/vct3-typed interface.
+
+    F_nom  : 4×4   ← nominal homogeneous matrix
+    C      : 6×6   ← pose covariance [α; ε] (right-convention)
+
+Constructors:
+    uFrame(F)            Frame, zero covariance
+    uFrame(F, covEta)    Frame + 6×6 pose covariance
+    uFrame(uR, up)       uncertain rotation + uncertain point
+                         C = block_diag(uR.C, up.C)
+    uFrame(R,  up)       certain rotation  + uncertain point
+    uFrame(uR, p)        uncertain rotation + certain  point
+
+Properties:
+    .F         → Frame   (nominal)
+    .F_nom     → 4×4 numpy array
+    .C         → 6×6 covariance
+    .convention → Convention
+
+Multiplication:
+    uFrame * uFrame  →  uFrame  (delegates to UncertainTransform.compose)
+    uFrame * Frame   →  uFrame
+    uFrame * uvct3   →  uvct3   (apply_to_point with point covariance)
+    uFrame * vct3    →  uvct3   (apply_to_point, no input covariance)
+    Frame  * uFrame  →  uFrame  (left frame is certain)
+
+Methods:
+    .inv()                    → uFrame (delegates to UncertainTransform.inv)
+    .to_uncertain_transform() → UncertainTransform
+
+Convention bridge (same semantics as UncertainTransform):
+    uFrame.from_left_covariance(F_or_nom, C_left) → uFrame
+    uFrame.as_right_convention() → uFrame
+    uFrame.as_left_convention()  → uFrame
+```
+
 ---
 
 ## 4. GeometricNetwork  (`network.py`)
@@ -868,6 +957,10 @@ src/uncertainty_networks/
 ├── se3.py                   SE(3) math primitives
 │                            exp_se3, log_se3, adjoint_se3, skew, inv_se3
 │
+├── nominal_types.py         Nominal (non-uncertain) geometric types
+│                            vct3 (3-D point), Rot (rotation matrix),
+│                            Frame (rigid transform = Rot + vct3)
+│
 ├── uncertain_geometry.py    Core uncertain transform type
 │                            Convention (RIGHT / LEFT)
 │                            UncertainTransform (compose, inv, apply_to_point,
@@ -875,7 +968,18 @@ src/uncertainty_networks/
 │                              from_left_covariance, from_nominal_frame)
 │
 ├── uncertain_types.py       User-facing uncertain Cartesian types
-│                            uScalar, uVector, uvct3, uRot, uFrame
+│                            uScalar, uVector
+│                            uvct3  (uncertain 3-D point)
+│                            uRot   (uncertain rotation, convention-aware)
+│                            uFrame (uncertain rigid frame, wraps UncertainTransform)
+│
+├── observations.py          General observation / factor interface
+│                            Observation (abstract base)
+│                            LoopObservation      (6-D loop-closure constraint)
+│                            PointObservation     (3-D point measurement)
+│                            DistanceObservation  (1-D distance measurement)
+│                            ConditioningResult
+│                            condition_on_observations  (joint info-filter update)
 │
 ├── network.py               Main graph structure + all queries
 │                            GeometricNetwork, Edge, PathResult, PointNode
@@ -902,6 +1006,136 @@ src/uncertainty_networks/
 
   The last edge contributes its covariance directly; earlier edges
   are mapped through the suffix-adjoint-inverse of all subsequent transforms.
+```
+
+---
+
+## 15. General Observation Interface  (`observations.py`)
+
+Generalises the hard-coded loop constraint in `closed_loop.py` to any sensor
+measurement.  All concrete types share one linear-Gaussian form and can be
+conditioned upon jointly via `condition_on_observations`.
+
+### 15a. Observation (abstract base)
+
+```
+CLASS Observation  (abstract):
+    Represents a measurement  r(eta) ≈ r0 + Σ_k  J_k · eta_k  ≈  0 + ν
+    where  ν ~ N(0, C_nu).
+
+    Abstract methods:
+        .residual()   → (m,)      nominal residual r0 at zero perturbation
+        .jacobians()  → {key: (m,6)}  ∂r/∂eta_k for each named state key
+        .noise_cov()  → (m,m)     C_nu
+
+    Derived properties:
+        .dim          → int        residual dimension m
+        .state_keys   → list[str]  which state variables this touches
+```
+
+### 15b. Concrete Observation Types
+
+```
+─── LoopObservation ──────────────────────────────────────────────────
+    Constraint: two paths with the same endpoints should compose to I.
+
+    Residual (dim=6):
+        r = log_se3( F_res^{-1} · F_k )  ≈  0
+
+    Jacobians via finite differences (same as closed_loop.linearize_loop_residual):
+        J_res  (6×6),   J_k  (6×6)
+
+    Constructor:
+        LoopObservation(F_res, F_k, key_res, key_k, C_nu=1e-9·I)
+
+─── PointObservation ─────────────────────────────────────────────────
+    Constraint: observed 3D point z in a coordinate frame.
+
+    Residual (dim=3):
+        r = p_nom - z
+
+    Jacobian (CIS I right-perturbation):
+        J_eta = [-R·[p_in]×  |  R]        shape (3,6)
+        where p_in = R^T (p_nom - t)  is the point in the source frame
+
+    If F_nom not given, falls back to:
+        J_eta = [-[p_nom]×  |  I_3]       (identity approximation)
+
+    Constructor:
+        PointObservation(p_nom, J_eta, key, z, C_nu)   ← manual
+        PointObservation.build(p_nom, key, z, C_nu, F_nom=None)  ← auto Jacobian
+
+─── DistanceObservation ──────────────────────────────────────────────
+    Constraint: observed scalar distance z between two points p1, p2.
+
+    Residual (dim=1):
+        r = d_nom - z,    d_nom = ||p1 - p2||
+
+    Jacobians (unit vector u = (p1-p2)/d_nom):
+        J_1 = u^T  J_eta_1     shape (1,6)
+        J_2 = -u^T J_eta_2     shape (1,6)
+        If key_1 == key_2: merge into single entry J_1 + J_2.
+
+    Constructor:
+        DistanceObservation(p1, p2, J1, J2, key_1, key_2, z, sigma)
+        DistanceObservation.build(p1, p2, key_1, key_2, z, sigma,
+                                  F_nom_1=None, F_nom_2=None)
+```
+
+### 15c. Joint Conditioning
+
+```
+FUNCTION condition_on_observations(priors, observations):
+    priors       : {key: (6,6)}     prior covariance per state variable
+    observations : list[Observation]  any mix of types
+
+    ── Assemble state ─────────────────────────────────────────────
+    keys  = sorted(priors.keys())         K variables
+    C0    = block_diag(C_k for k in keys)  shape (6K, 6K)
+
+    ── Assemble H and C_nu ────────────────────────────────────────
+    FOR each observation i (residual dim m_i):
+        H_i      = zeros(m_i, 6K)
+        FOR each (key, J_k) in observation.jacobians():
+            col_offset = 6 * keys.index(key)
+            H_i[:, col_offset : col_offset+6] = J_k
+
+    H      = vstack([H_i])                  shape (M, 6K)
+    C_nu   = block_diag(obs.noise_cov())    shape (M, M)
+
+    ── Information filter update ───────────────────────────────────
+    C_post = (C0^{-1} + H^T · C_nu^{-1} · H)^{-1}    shape (6K, 6K)
+
+    ── Extract per-key posteriors ──────────────────────────────────
+    posteriors[key_k] = C_post[6k:6k+6, 6k:6k+6]
+
+    RETURN ConditioningResult(posteriors, C_post, keys, r0_stacked)
+```
+
+```
+CLASS ConditioningResult:
+    posteriors : {key: (6,6)}   per-variable posterior covariance
+    C_full     : (6K, 6K)       full joint posterior (enables cross-terms)
+    keys       : list[str]      sorted key ordering matching C_full blocks
+    r0         : (M,)           stacked nominal residuals
+
+    .cross_cov(key_a, key_b) → (6,6)   off-diagonal block of C_full
+```
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  Why use observations.py instead of closed_loop.py directly?         │
+│                                                                      │
+│  closed_loop.condition_on_loop handles ONE loop at a time and is     │
+│  hard-coded to the 6D loop residual.                                 │
+│                                                                      │
+│  condition_on_observations handles:                                  │
+│    • any number of loop constraints                                  │
+│    • point-position measurements (3D)                                │
+│    • distance measurements (1D)                                      │
+│    • future sensor types (implement Observation subclass)            │
+│    … all jointly, in one information-filter update.                  │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
