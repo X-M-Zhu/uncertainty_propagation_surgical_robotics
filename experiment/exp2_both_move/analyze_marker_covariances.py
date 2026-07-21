@@ -186,22 +186,32 @@ def main():
     fig.savefig(str(out1), dpi=150)
     print(f"Saved → {out1}")
 
-    # ── Plot: isotropy check ──────────────────────────────────────────────────
-    isoA_arr = np.array(isoA_per_cfg)
+    # ── Plot: isotropy check (bar chart) ─────────────────────────────────────
+    isoA_arr = np.array(isoA_per_cfg)   # (n_cfg, n_markers)
     isoB_arr = np.array(isoB_per_cfg)
 
+    avg_isoA = isoA_arr.mean(axis=1)
+    avg_isoB = isoB_arr.mean(axis=1)
+
+    x_bar = np.arange(len(labels))
+    width = 0.35
+
     fig2, ax2 = plt.subplots(figsize=(9, 4))
+    ax2.bar(x_bar - width / 2, avg_isoA, width, color="steelblue", alpha=0.85, label="anatomy (avg across markers)")
+    ax2.bar(x_bar + width / 2, avg_isoB, width, color="tomato",    alpha=0.85, label="drill   (avg across markers)")
+
+    # Overlay individual marker values as dots
     for k in range(n_markers):
-        ax2.plot(x, isoA_arr[:, k], "o-",  color=colors_A[k % 4], label=f"anatomy m{k}")
-        ax2.plot(x, isoB_arr[:, k], "s--", color=colors_B[k % 4], label=f"drill   m{k}")
-    ax2.axhline(1.0, color="black", linestyle=":", linewidth=1, label="perfect isotropy")
-    ax2.set_ylim(0, 1.1)
-    ax2.set_xticks(x)
+        ax2.scatter(x_bar - width / 2, isoA_arr[:, k], color="navy",    s=18, zorder=3)
+        ax2.scatter(x_bar + width / 2, isoB_arr[:, k], color="darkred", s=18, zorder=3)
+
+    ax2.axhline(1.0, color="black", linestyle=":", linewidth=1.2, label="perfect isotropy (= 1)")
+    ax2.set_xticks(x_bar)
     ax2.set_xticklabels(labels, rotation=15)
-    ax2.set_ylabel("Isotropy  λ_min / λ_max  (1 = isotropic)")
-    ax2.set_title("Marker noise isotropy by configuration")
-    ax2.legend(fontsize=8, ncol=2)
-    ax2.grid(True, alpha=0.3)
+    ax2.set_ylabel("Isotropy  λ_min / λ_max")
+    ax2.set_title("Marker noise isotropy by configuration\n(bar = avg across 4 markers, dots = individual markers)")
+    ax2.legend(fontsize=9)
+    ax2.grid(True, axis="y", alpha=0.3)
     fig2.tight_layout()
     out2 = RESULTS_DIR / "fig_marker_isotropy.png"
     fig2.savefig(str(out2), dpi=150)

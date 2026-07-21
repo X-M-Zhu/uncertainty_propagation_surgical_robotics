@@ -196,21 +196,34 @@ def main():
     fig.savefig(str(out1), dpi=150)
     print(f"Saved → {out1}")
 
-    # ── Plot: isotropy check ──────────────────────────────────────────────────
-    isoA_arr = np.array(isoA_per_pos)[order]
+    # ── Plot: isotropy check (bar chart) ─────────────────────────────────────
+    isoA_arr = np.array(isoA_per_pos)[order]   # (n_pos, n_markers)
     isoB_arr = np.array(isoB_per_pos)[order]
 
-    fig2, ax2 = plt.subplots(figsize=(9, 4))
+    avg_isoA = isoA_arr.mean(axis=1)   # average across markers per position
+    avg_isoB = isoB_arr.mean(axis=1)
+
+    x     = np.arange(len(dists))
+    width = 0.35
+    xlabels = [f"{d:.0f}" for d in dists]
+
+    fig2, ax2 = plt.subplots(figsize=(10, 4))
+    ax2.bar(x - width / 2, avg_isoA, width, color="tomato",    alpha=0.85, label="drill  (avg across markers)")
+    ax2.bar(x + width / 2, avg_isoB, width, color="steelblue", alpha=0.85, label="anatomy (avg across markers)")
+
+    # Overlay individual marker values as dots
     for k in range(n_markers):
-        ax2.plot(dists, isoA_arr[:, k], "o-",  color=colors_A[k % 4], label=f"drill  m{k}")
-        ax2.plot(dists, isoB_arr[:, k], "s--", color=colors_B[k % 4], label=f"anatomy m{k}")
-    ax2.axhline(1.0, color="black", linestyle=":", linewidth=1, label="perfect isotropy")
-    ax2.set_ylim(0, 1.1)
+        ax2.scatter(x - width / 2, isoA_arr[:, k], color="darkred", s=18, zorder=3)
+        ax2.scatter(x + width / 2, isoB_arr[:, k], color="navy",    s=18, zorder=3)
+
+    ax2.axhline(1.0, color="black", linestyle=":", linewidth=1.2, label="perfect isotropy (= 1)")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(xlabels, rotation=30)
     ax2.set_xlabel("Drill distance from tracker (mm)")
-    ax2.set_ylabel("Isotropy  λ_min / λ_max  (1 = isotropic)")
-    ax2.set_title("Marker noise isotropy vs. drill distance")
-    ax2.legend(fontsize=8, ncol=2)
-    ax2.grid(True, alpha=0.3)
+    ax2.set_ylabel("Isotropy  λ_min / λ_max")
+    ax2.set_title("Marker noise isotropy vs. drill distance\n(bar = avg across 4 markers, dots = individual markers)")
+    ax2.legend(fontsize=9)
+    ax2.grid(True, axis="y", alpha=0.3)
     fig2.tight_layout()
     out2 = RESULTS_DIR / "fig_marker_isotropy.png"
     fig2.savefig(str(out2), dpi=150)

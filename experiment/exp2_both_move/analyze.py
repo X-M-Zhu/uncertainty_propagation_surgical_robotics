@@ -201,10 +201,11 @@ def main():
         ax.plot(x, tip_e_list, "^-",  color="purple",    label="σ_tip empirical  (tip in Anatomy)")
         ax.plot(x, tip_p_list, "^--", color="mediumpurple", label="σ_tip predicted")
 
-    ax.set_ylabel("σ translation (mm)")
+    ax.set_yscale("log")
+    ax.set_ylabel("σ translation (mm)  [log scale]")
     ax.set_title("Exp 2 — Both bodies move: predicted vs. empirical uncertainty")
     ax.legend(fontsize=9)
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, alpha=0.3, which="both")
 
     ax2.bar(x, rel_list, color="steelblue", alpha=0.8)
     ax2.axhline(0, color="black", linewidth=0.8)

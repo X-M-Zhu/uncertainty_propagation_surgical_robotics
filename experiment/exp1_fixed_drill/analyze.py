@@ -194,10 +194,11 @@ def main():
             ax.plot(dists, tip_emp_list,  "^-",  color="darkorange",  label="σ_tip empirical")
             ax.plot(dists, tip_pred_list, "^--", color="forestgreen", label="σ_tip predicted")
 
-        ax.set_ylabel("σ translation (mm)")
+        ax.set_yscale("log")
+        ax.set_ylabel("σ translation (mm)  [log scale]")
         ax.set_title("Fixed-Anatomy experiment: pose & tip uncertainty vs drill distance")
         ax.legend()
-        ax.grid(True, alpha=0.3)
+        ax.grid(True, alpha=0.3, which="both")
 
         ax2.bar(dists, diff_t, width=12, color="steelblue", alpha=0.7)
         ax2.axhline(0, color="black", linewidth=0.8)
